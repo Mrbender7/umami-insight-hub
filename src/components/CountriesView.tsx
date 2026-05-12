@@ -11,10 +11,21 @@ const COUNTRY_NAMES: Record<string, string> = {
   TN: "Tunisie", SN: "Sénégal", CI: "Côte d'Ivoire", CD: "RD Congo",
 };
 
-function flag(code: string): string {
-  if (!code || code.length !== 2) return "🌐";
-  const A = 0x1f1e6;
-  return String.fromCodePoint(A + code.charCodeAt(0) - 65, A + code.charCodeAt(1) - 65);
+function Flag({ code }: { code: string }) {
+  if (!code || code.length !== 2 || code === "??") {
+    return <span className="inline-block w-6 h-4 rounded-sm bg-muted ring-1 ring-border" />;
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/24x18/${code.toLowerCase()}.png`}
+      srcSet={`https://flagcdn.com/48x36/${code.toLowerCase()}.png 2x`}
+      width={24}
+      height={18}
+      alt={code}
+      loading="lazy"
+      className="inline-block rounded-sm ring-1 ring-border/60 shadow-sm"
+    />
+  );
 }
 
 function fmtDuration(seconds: number): string {
@@ -109,7 +120,7 @@ export function CountriesView({ period }: { period: Period }) {
                   <tr key={r.code} className="border-t border-border/40 hover:bg-accent/20 transition">
                     <td className="px-5 py-2.5">
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-lg">{flag(r.code)}</span>
+                        <Flag code={r.code} />
                         <span className="font-medium">{COUNTRY_NAMES[r.code] ?? r.code}</span>
                         <span className="text-[10px] text-muted-foreground font-mono">{r.code}</span>
                       </span>
