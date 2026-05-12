@@ -102,7 +102,9 @@ export function getRange(period: Period): Range {
   const day = 24 * 60 * 60 * 1000;
   if (period === "24h") return { startAt: endAt - day, endAt, unit: "hour" };
   if (period === "7d") return { startAt: endAt - 7 * day, endAt, unit: "day" };
-  return { startAt: endAt - 30 * day, endAt, unit: "day" };
+  if (period === "30d") return { startAt: endAt - 30 * day, endAt, unit: "day" };
+  // "all" — Umami garde l'historique complet ; on prend 2 ans en arrière par sécurité
+  return { startAt: endAt - 730 * day, endAt, unit: "month" };
 }
 
 async function umamiFetch<T>(
