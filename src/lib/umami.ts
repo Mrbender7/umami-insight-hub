@@ -1,4 +1,4 @@
-// Umami Cloud API client (browser-side)
+// Umami Cloud API client
 // Requires: VITE_UMAMI_WEBSITE_ID, VITE_UMAMI_API_TOKEN
 // Optional: VITE_UMAMI_API_URL (defaults to https://cloud.umami.is/api)
 
@@ -8,6 +8,7 @@ const WEBSITE_ID =
 const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
 const API_TOKEN = API_TOKEN_ENV ?? "";
 const HAS_API_TOKEN = API_TOKEN_ENV !== undefined && API_TOKEN_ENV !== "";
+const USE_STATIC_DATA = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
@@ -22,8 +23,8 @@ function buildProxiedUrl(targetUrl: string) {
 export function getEnvStatus() {
   return {
     websiteId: !!WEBSITE_ID,
-    apiToken: HAS_API_TOKEN,
-    apiTokenEmpty: !HAS_API_TOKEN,
+    apiToken: USE_STATIC_DATA || HAS_API_TOKEN,
+    apiTokenEmpty: !USE_STATIC_DATA && !HAS_API_TOKEN,
     apiUrl: API_URL,
     corsProxy: CORS_PROXY,
   };
