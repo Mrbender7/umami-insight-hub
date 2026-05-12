@@ -81,12 +81,10 @@ async function umamiFetch<T>(
   let res: Response;
   try {
     res = await fetch(finalUrl, {
-      headers: CORS_PROXY
-        ? undefined
-        : {
-            "x-umami-api-key": API_TOKEN,
-            Accept: "application/json",
-          },
+      headers: {
+        "x-umami-api-key": API_TOKEN,
+        Accept: "application/json",
+      },
     });
   } catch (error) {
     throw new Error(
