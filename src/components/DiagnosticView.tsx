@@ -34,6 +34,7 @@ const PERIOD_LABEL: Record<Period, string> = {
   "24h": "Dernières 24 heures",
   "7d": "7 derniers jours",
   "30d": "30 derniers jours",
+  "all": "Depuis le début",
 };
 
 export function DiagnosticView({ period }: { period: Period }) {
