@@ -27,6 +27,7 @@ import {
   breakdownErrorCodes,
   generateHypotheses,
   buildAgentPrompt,
+  countUniqueErrorSessions,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
