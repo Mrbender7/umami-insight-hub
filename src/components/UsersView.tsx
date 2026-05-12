@@ -10,10 +10,21 @@ const COUNTRY_NAMES: Record<string, string> = {
   US: "États-Unis", GB: "Royaume-Uni", DE: "Allemagne", NL: "Pays-Bas",
 };
 
-function flag(code?: string): string {
-  if (!code || code.length !== 2) return "🌐";
-  const A = 0x1f1e6;
-  return String.fromCodePoint(A + code.charCodeAt(0) - 65, A + code.charCodeAt(1) - 65);
+function Flag({ code }: { code?: string }) {
+  if (!code || code.length !== 2) {
+    return <span className="inline-block w-5 h-3.5 rounded-sm bg-muted ring-1 ring-border" />;
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/20x15/${code.toLowerCase()}.png`}
+      srcSet={`https://flagcdn.com/40x30/${code.toLowerCase()}.png 2x`}
+      width={20}
+      height={15}
+      alt={code}
+      loading="lazy"
+      className="inline-block rounded-sm ring-1 ring-border/60"
+    />
+  );
 }
 
 function fmtDuration(seconds: number): string {
