@@ -60,17 +60,19 @@ export function getRange(period: Period): Range {
 
 async function umamiFetch<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
   if (!WEBSITE_ID || !API_TOKEN) {
-    throw new Error("Missing VITE_UMAMI_WEBSITE_ID or VITE_UMAMI_API_TOKEN");
+    throw new Error(
+      `Variables d'environnement manquantes : ${!WEBSITE_ID ? "VITE_UMAMI_WEBSITE_ID " : ""}${!API_TOKEN ? "VITE_UMAMI_API_TOKEN" : ""}`.trim()
+    );
   }
   const url = new URL(`${API_URL}${path}`);
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   });
-  const res = await fetch(url.toString(), {
+  const finalUrl = CORS_PROXY ? `${CORS_PROXY}${encodeURIComponent(url.toString())}` : url.toString();
+  const res = await fetch(finalUrl, {
     headers: {
       "x-umami-api-key": API_TOKEN,
-      Authorization: `Bearer ${API_TOKEN}`,
-      "Content-Type": "application/json",
+      Accept: "application/json",
     },
   });
   if (!res.ok) {
