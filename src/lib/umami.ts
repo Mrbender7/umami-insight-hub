@@ -1,10 +1,12 @@
-// Umami Cloud API v2 client (browser-side)
+// Umami Cloud API client (browser-side)
 // Requires: VITE_UMAMI_WEBSITE_ID, VITE_UMAMI_API_TOKEN
-// Optional: VITE_UMAMI_API_URL (defaults to https://api.umami.is/v1)
+// Optional: VITE_UMAMI_API_URL (defaults to https://cloud.umami.is/api)
 
-const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://api.umami.is/v1";
-const WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID as string;
-const API_TOKEN = import.meta.env.VITE_UMAMI_API_TOKEN as string;
+const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://cloud.umami.is/api";
+const WEBSITE_ID =
+  (import.meta.env.VITE_UMAMI_WEBSITE_ID as string) ||
+  "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
+const API_TOKEN = (import.meta.env.VITE_UMAMI_API_TOKEN as string) || "";
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
@@ -20,6 +22,7 @@ export function getEnvStatus() {
   return {
     websiteId: !!WEBSITE_ID,
     apiToken: !!API_TOKEN,
+    apiTokenEmpty: !API_TOKEN,
     apiUrl: API_URL,
     corsProxy: CORS_PROXY,
   };
@@ -82,19 +85,20 @@ async function umamiFetch<T>(
   try {
     res = await fetch(finalUrl, {
       headers: {
-        "x-umami-api-key": API_TOKEN,
+        Authorization: `Bearer ${API_TOKEN}`,
         Accept: "application/json",
       },
     });
   } catch (error) {
     throw new Error(
-      `Impossible de joindre l'API Umami via ${CORS_PROXY || "l'URL directe"}. ` +
-        `Le proxy CORS peut être indisponible ou bloquer les headers. Détail : ${(error as Error).message}`,
+      `Fetch error: ${(error as Error).message}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
     );
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Umami ${res.status}: ${text || res.statusText}`);
+    throw new Error(
+      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
+    );
   }
   return res.json() as Promise<T>;
 }
