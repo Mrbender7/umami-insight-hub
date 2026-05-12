@@ -120,7 +120,7 @@ export function CountriesView({ period }: { period: Period }) {
                   <tr key={r.code} className="border-t border-border/40 hover:bg-accent/20 transition">
                     <td className="px-5 py-2.5">
                       <span className="inline-flex items-center gap-2">
-                        <span className="text-lg">{flag(r.code)}</span>
+                        <Flag code={r.code} />
                         <span className="font-medium">{COUNTRY_NAMES[r.code] ?? r.code}</span>
                         <span className="text-[10px] text-muted-foreground font-mono">{r.code}</span>
                       </span>
