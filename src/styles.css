@@ -116,3 +116,29 @@
   background-origin: border-box;
   background-clip: padding-box, border-box;
 }
+
+@media print {
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: #111 !important;
+  }
+  .shadow-neon, .shadow-glow { box-shadow: none !important; }
+  .border-neon {
+    border: 1px solid #ddd !important;
+    background-image: none !important;
+  }
+  .bg-gradient-card, .bg-gradient-neon, .bg-gradient-neon-soft {
+    background-image: none !important;
+    background-color: white !important;
+    color: #111 !important;
+  }
+  .text-gradient-neon {
+    background-image: none !important;
+    -webkit-text-fill-color: #4338ca !important;
+    color: #4338ca !important;
+  }
+  .text-muted-foreground { color: #555 !important; }
+  header.sticky { position: static !important; backdrop-filter: none !important; }
+  @page { margin: 1.5cm; }
+}
