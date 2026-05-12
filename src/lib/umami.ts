@@ -80,6 +80,7 @@ function getPeriodFromRange(range: Range): Period {
   const duration = range.endAt - range.startAt;
   const day = 24 * 60 * 60 * 1000;
   if (range.unit === "hour") return "24h";
+  if (range.unit === "month") return "all";
   return duration <= 8 * day ? "7d" : "30d";
 }
 
