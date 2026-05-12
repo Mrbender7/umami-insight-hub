@@ -84,15 +84,15 @@ function getPeriodFromRange(range: Range): Period {
 }
 
 async function loadStaticData(): Promise<StaticUmamiData> {
-  staticDataPromise ??= fetch("./umami-data.json", { headers: { Accept: "application/json" } }).then(
-    async (res) => {
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText} en lisant umami-data.json. ${text}`);
-      }
-      return res.json() as Promise<StaticUmamiData>;
-    },
-  );
+  staticDataPromise ??= fetch("./umami-data.json", {
+    headers: { Accept: "application/json" },
+  }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} en lisant umami-data.json. ${text}`);
+    }
+    return res.json() as Promise<StaticUmamiData>;
+  });
   return staticDataPromise;
 }
 
