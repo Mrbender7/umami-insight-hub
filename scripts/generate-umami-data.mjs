@@ -17,6 +17,7 @@ const periods = {
   "24h": { startAt: endAt - day, endAt, unit: "hour" },
   "7d": { startAt: endAt - 7 * day, endAt, unit: "day" },
   "30d": { startAt: endAt - 30 * day, endAt, unit: "day" },
+  "all": { startAt: endAt - 730 * day, endAt, unit: "month" },
 };
 
 async function umamiFetch(path, params = {}) {
