@@ -1,26 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { PasswordGate } from "@/components/PasswordGate";
+import { Dashboard } from "@/components/Dashboard";
+import { isAuthed } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Stats Umami — Dashboard analytique privé" },
+      { name: "description", content: "Tableau de bord analytique privé connecté à Umami Cloud." },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
-
 function Index() {
-  return <PlaceholderIndex />;
+  const [authed, setAuthed] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setAuthed(isAuthed());
+    setReady(true);
+  }, []);
+
+  if (!ready) return <div className="min-h-screen" />;
+  if (!authed) return <PasswordGate onSuccess={() => setAuthed(true)} />;
+  return <Dashboard onLogout={() => setAuthed(false)} />;
 }
