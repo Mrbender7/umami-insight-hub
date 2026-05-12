@@ -75,30 +75,30 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
           <div className="flex items-center gap-2 print:hidden">
             <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
-              <button
-                onClick={() => setView("dashboard")}
-                className={
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
-                  (view === "dashboard"
-                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                <BarChart3 className="size-3.5" />
-                Vue d'ensemble
-              </button>
-              <button
-                onClick={() => setView("diagnostic")}
-                className={
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
-                  (view === "diagnostic"
-                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                <Brain className="size-3.5" />
-                Diagnostic
-              </button>
+              {([
+                { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
+                { id: "diagnostic", label: "Diagnostic", icon: Brain },
+                { id: "countries", label: "Pays", icon: Globe2 },
+                { id: "users", label: "Utilisateurs", icon: Users },
+              ] as const).map((tab) => {
+                const Icon = tab.icon;
+                const active = view === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setView(tab.id)}
+                    className={
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
+                      (active
+                        ? "bg-gradient-neon text-primary-foreground shadow-glow"
+                        : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    <Icon className="size-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
             <PeriodSelector value={period} onChange={setPeriod} />
             <button
