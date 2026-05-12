@@ -146,6 +146,10 @@ export interface EventCount {
 }
 
 export async function getEventCounts(range: Range): Promise<EventCount[]> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].counts;
+  }
   return umamiFetch<EventCount[]>(`/websites/${WEBSITE_ID}/metrics`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -161,6 +165,10 @@ export interface EventSeriesPoint {
 }
 
 export async function getEventSeries(range: Range): Promise<EventSeriesPoint[]> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].series;
+  }
   return umamiFetch<EventSeriesPoint[]>(`/websites/${WEBSITE_ID}/events/series`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -189,6 +197,10 @@ export interface PagedEvents {
 }
 
 export async function getRecentEvents(range: Range, query?: string): Promise<PagedEvents> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].events;
+  }
   return umamiFetch<PagedEvents>(`/websites/${WEBSITE_ID}/events`, {
     startAt: range.startAt,
     endAt: range.endAt,
