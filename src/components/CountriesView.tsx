@@ -11,10 +11,21 @@ const COUNTRY_NAMES: Record<string, string> = {
   TN: "Tunisie", SN: "Sénégal", CI: "Côte d'Ivoire", CD: "RD Congo",
 };
 
-function flag(code: string): string {
-  if (!code || code.length !== 2) return "🌐";
-  const A = 0x1f1e6;
-  return String.fromCodePoint(A + code.charCodeAt(0) - 65, A + code.charCodeAt(1) - 65);
+function Flag({ code }: { code: string }) {
+  if (!code || code.length !== 2 || code === "??") {
+    return <span className="inline-block w-6 h-4 rounded-sm bg-muted ring-1 ring-border" />;
+  }
+  return (
+    <img
+      src={`https://flagcdn.com/24x18/${code.toLowerCase()}.png`}
+      srcSet={`https://flagcdn.com/48x36/${code.toLowerCase()}.png 2x`}
+      width={24}
+      height={18}
+      alt={code}
+      loading="lazy"
+      className="inline-block rounded-sm ring-1 ring-border/60 shadow-sm"
+    />
+  );
 }
 
 function fmtDuration(seconds: number): string {
