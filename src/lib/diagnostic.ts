@@ -509,19 +509,57 @@ export function buildAgentPrompt(args: {
     lines.push(`| \`${p.param}\` | ${p.percentOfErrors}% | ${p.occurrences} | ${p.uniqueValues} |`);
   });
   lines.push(``);
+  lines.push(`## Commandes d'investigation prêtes à coller`);
+  lines.push(``);
+  lines.push(
+    `Exécute ces commandes dans le repo Radio Sphere pour localiser les fichiers suspects en quelques secondes :`,
+  );
+  lines.push(``);
+  lines.push("```bash");
+  lines.push(`# 1. Tous les composants qui lisent l'URL au render initial (suspect #1)`);
+  lines.push(
+    `rg -n "useSearchParams|window\\.location\\.search|window\\.location\\.hash|URLSearchParams|new URL\\(window" src/`,
+  );
+  lines.push(``);
+  lines.push(`# 2. Composants qui touchent window/document/navigator au top-level d'un render`);
+  lines.push(
+    `rg -n "typeof window|typeof document|typeof navigator" src/`,
+  );
+  lines.push(``);
+  lines.push(`# 3. Sources de non-déterminisme (Date.now, Math.random, new Date au render)`);
+  lines.push(`rg -n "Date\\.now\\(\\)|Math\\.random\\(\\)|new Date\\(\\)" src/components src/routes`);
+  lines.push(``);
+  lines.push(`# 4. HTML invalide potentiel (div dans p, a dans a)`);
+  lines.push(`rg -n "<p[^>]*>" src/ -A 5 | rg -B 1 "<div|<section|<article|<ul|<ol"`);
+  lines.push(``);
+  lines.push(`# 5. Composants Suspense / lazy (suspects pour les erreurs 421/423)`);
+  lines.push(`rg -n "Suspense|React\\.lazy|lazy\\(" src/`);
+  lines.push(``);
+  lines.push(`# 6. Endroits où on track les fbclid/utm (pour confirmer où l'URL est lue)`);
+  lines.push(`rg -n "fbclid|utm_source|utm_campaign" src/`);
+  lines.push("```");
+  lines.push(``);
   lines.push(`## Action attendue de toi (agent IA)`);
   lines.push(``);
   lines.push(`1. Lire ce rapport en entier.`);
   lines.push(
-    `2. Commencer par l'hypothèse #1 (la plus probable) et chercher dans le code les patterns mentionnés.`,
+    `2. Exécuter d'abord les commandes d'investigation ci-dessus pour identifier les fichiers candidats.`,
   );
   lines.push(
-    `3. Pour chaque composant suspect : analyser ses imports, ses useEffect, ses accès à window/document/location.`,
+    `3. Pour chaque candidat : analyser ses imports, ses useEffect, ses accès à window/document/location au render initial (= en dehors d'un useEffect).`,
   );
   lines.push(
-    `4. Proposer un correctif minimal (une PR, un fichier à la fois) et expliquer pourquoi ça devrait résoudre le problème.`,
+    `4. Hypothèse #1 en priorité absolue : trouver le composant qui lit les query params au premier render et le fixer (déplacer dans useEffect + état local initialisé à une valeur stable).`,
   );
-  lines.push(`5. Suggérer comment tester localement (ex: ouvrir une URL avec ?fbclid=test).`);
+  lines.push(
+    `5. Proposer un correctif minimal (un fichier à la fois) en expliquant précisément pourquoi le mismatch SSR/CSR disparaît.`,
+  );
+  lines.push(
+    `6. Donner la commande pour reproduire en local : ouvrir http://localhost:PORT/?fbclid=test123&utm_source=facebook → l'erreur doit apparaître AVANT le fix et disparaître APRÈS.`,
+  );
+  lines.push(
+    `7. Note : le total de ${errorBreakdown.reduce((acc, e) => acc + e.count, 0)} events d'erreur ne signifie PAS ${errorBreakdown.reduce((acc, e) => acc + e.count, 0)} utilisateurs — chaque mismatch React déclenche typiquement 3-4 events (hydration-error + #418 + #423). Corriger la cause racine devrait éliminer la majorité des events d'un coup.`,
+  );
   lines.push(``);
   lines.push(`---`);
   lines.push(`*Rapport généré automatiquement par stats-umami à partir des données Umami Cloud.*`);
