@@ -32,7 +32,8 @@ export default function App() {
       )}
       {missing.length > 0 && (
         <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm text-center">
-          Variables d'environnement manquantes : {missing.join(", ")}. Vérifiez vos GitHub Secrets et le workflow de build.
+          Variables d'environnement manquantes : {missing.join(", ")}. Vérifiez vos GitHub Secrets
+          et le workflow de build.
         </div>
       )}
       {!authed ? (
