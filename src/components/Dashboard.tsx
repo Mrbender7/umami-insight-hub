@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
+  BarChart3, Brain,
 } from "lucide-react";
+import { DiagnosticView } from "./DiagnosticView";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
@@ -13,8 +15,11 @@ import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
 
+type View = "dashboard" | "diagnostic";
+
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("24h");
+  const [view, setView] = useState<View>("dashboard");
   const range = useMemo(() => getRange(period), [period]);
 
   const counts = useQuery({
@@ -66,7 +71,33 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
               <p className="text-xs text-muted-foreground">Tableau de bord analytique</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 print:hidden">
+            <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
+              <button
+                onClick={() => setView("dashboard")}
+                className={
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
+                  (view === "dashboard"
+                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                <BarChart3 className="size-3.5" />
+                Vue d'ensemble
+              </button>
+              <button
+                onClick={() => setView("diagnostic")}
+                className={
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
+                  (view === "diagnostic"
+                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                <Brain className="size-3.5" />
+                Diagnostic
+              </button>
+            </div>
             <PeriodSelector value={period} onChange={setPeriod} />
             <button
               onClick={refresh}
@@ -94,6 +125,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {view === "diagnostic" ? (
+          <DiagnosticView period={period} />
+        ) : (
+          <>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Ad landing" value={adLanding.toLocaleString()} icon={MousePointerClick} accent="blue" hint="Visiteurs depuis les pubs" />
           <KpiCard label="Taux de rebond" value={`${bounceRate}%`} icon={Activity} accent="violet" hint={`${earlyBounce} bounces / ${adLanding} arrivées`} />
@@ -108,6 +143,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         <section>
           <ErrorsTable events={events.data?.data ?? []} />
         </section>
+          </>
+        )}
 
         <footer className="pt-4 pb-8 text-center text-xs text-muted-foreground">
           Données Umami Cloud · Période : {period}
