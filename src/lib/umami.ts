@@ -6,9 +6,10 @@ const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://api.u
 const WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID as string;
 const API_TOKEN = import.meta.env.VITE_UMAMI_API_TOKEN as string;
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
-const CORS_PROXY = import.meta.env.VITE_CORS_PROXY !== undefined
-  ? (import.meta.env.VITE_CORS_PROXY as string)
-  : "https://corsproxy.io/";
+const CORS_PROXY =
+  import.meta.env.VITE_CORS_PROXY !== undefined
+    ? (import.meta.env.VITE_CORS_PROXY as string)
+    : "https://corsproxy.io/";
 
 function buildProxiedUrl(targetUrl: string) {
   if (!CORS_PROXY) return targetUrl;
@@ -68,10 +69,13 @@ export function getRange(period: Period): Range {
   return { startAt: endAt - 30 * day, endAt, unit: "day" };
 }
 
-async function umamiFetch<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+async function umamiFetch<T>(
+  path: string,
+  params: Record<string, string | number | undefined> = {},
+): Promise<T> {
   if (!WEBSITE_ID || !API_TOKEN) {
     throw new Error(
-      `Variables d'environnement manquantes : ${!WEBSITE_ID ? "VITE_UMAMI_WEBSITE_ID " : ""}${!API_TOKEN ? "VITE_UMAMI_API_TOKEN" : ""}`.trim()
+      `Variables d'environnement manquantes : ${!WEBSITE_ID ? "VITE_UMAMI_WEBSITE_ID " : ""}${!API_TOKEN ? "VITE_UMAMI_API_TOKEN" : ""}`.trim(),
     );
   }
   const url = new URL(`${API_URL}${path}`);
@@ -82,15 +86,17 @@ async function umamiFetch<T>(path: string, params: Record<string, string | numbe
   let res: Response;
   try {
     res = await fetch(finalUrl, {
-      headers: CORS_PROXY ? undefined : {
-        "x-umami-api-key": API_TOKEN,
-        Accept: "application/json",
-      },
+      headers: CORS_PROXY
+        ? undefined
+        : {
+            "x-umami-api-key": API_TOKEN,
+            Accept: "application/json",
+          },
     });
   } catch (error) {
     throw new Error(
       `Impossible de joindre l'API Umami via ${CORS_PROXY || "l'URL directe"}. ` +
-      `Le proxy CORS peut être indisponible ou bloquer les headers. Détail : ${(error as Error).message}`
+        `Le proxy CORS peut être indisponible ou bloquer les headers. Détail : ${(error as Error).message}`,
     );
   }
   if (!res.ok) {
