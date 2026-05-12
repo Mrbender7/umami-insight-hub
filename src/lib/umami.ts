@@ -66,6 +66,8 @@ interface StaticPeriodData {
   counts: EventCount[];
   series: EventSeriesPoint[];
   events: PagedEvents;
+  countries?: CountryStat[];
+  sessions?: PagedSessions;
 }
 
 interface StaticUmamiData {
