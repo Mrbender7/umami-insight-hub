@@ -9,16 +9,11 @@ const API_TOKEN = import.meta.env.VITE_UMAMI_API_TOKEN as string;
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
     ? (import.meta.env.VITE_CORS_PROXY as string)
-    : "https://corsproxy.io/";
+    : "https://api.allorigins.win/raw?url=";
 
 function buildProxiedUrl(targetUrl: string) {
   if (!CORS_PROXY) return targetUrl;
-
-  const proxyUrl = new URL(CORS_PROXY);
-  proxyUrl.searchParams.set("url", targetUrl);
-  proxyUrl.searchParams.append("reqHeaders", `x-umami-api-key:${API_TOKEN}`);
-  proxyUrl.searchParams.append("reqHeaders", "accept:application/json");
-  return proxyUrl.toString();
+  return `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
 }
 
 export function getEnvStatus() {
@@ -86,12 +81,10 @@ async function umamiFetch<T>(
   let res: Response;
   try {
     res = await fetch(finalUrl, {
-      headers: CORS_PROXY
-        ? undefined
-        : {
-            "x-umami-api-key": API_TOKEN,
-            Accept: "application/json",
-          },
+      headers: {
+        "x-umami-api-key": API_TOKEN,
+        Accept: "application/json",
+      },
     });
   } catch (error) {
     throw new Error(
