@@ -127,9 +127,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {view === "diagnostic" ? (
-          <DiagnosticView period={period} />
-        ) : (
+        {view === "diagnostic" && <DiagnosticView period={period} />}
+        {view === "countries" && <CountriesView period={period} />}
+        {view === "users" && <UsersView period={period} />}
+        {view === "dashboard" && (
           <>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Ad landing" value={adLanding.toLocaleString()} icon={MousePointerClick} accent="blue" hint="Visiteurs depuis les pubs" />
