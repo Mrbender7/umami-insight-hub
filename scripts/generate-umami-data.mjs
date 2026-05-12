@@ -29,7 +29,7 @@ async function umamiFetch(path, params = {}) {
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${API_TOKEN}`,
+      "x-umami-api-key": API_TOKEN,
       Accept: "application/json",
     },
   });
