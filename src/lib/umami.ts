@@ -5,6 +5,19 @@
 const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://api.umami.is/v1";
 const WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID as string;
 const API_TOKEN = import.meta.env.VITE_UMAMI_API_TOKEN as string;
+// CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
+const CORS_PROXY = import.meta.env.VITE_CORS_PROXY !== undefined
+  ? (import.meta.env.VITE_CORS_PROXY as string)
+  : "https://corsproxy.io/?";
+
+export function getEnvStatus() {
+  return {
+    websiteId: !!WEBSITE_ID,
+    apiToken: !!API_TOKEN,
+    apiUrl: API_URL,
+    corsProxy: CORS_PROXY,
+  };
+}
 
 export const TRAFFIC_EVENTS = [
   "ad-landing",
