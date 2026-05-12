@@ -68,7 +68,7 @@ for (const [period, range] of Object.entries(periods)) {
     events: await umamiFetch(`/websites/${WEBSITE_ID}/events`, {
       startAt: range.startAt,
       endAt: range.endAt,
-      pageSize: 200,
+      pageSize: 1000,
       orderBy: "createdAt",
     }),
   };
