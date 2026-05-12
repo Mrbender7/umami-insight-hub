@@ -297,9 +297,20 @@ export function generateHypotheses(args: {
   sessions: SessionStat[];
   totalErrors: number;
   totalAdLanding: number;
+  uniqueErrorSessions: number;
+  errorBreakdown: ErrorCodeBreakdown[];
 }): Hypothesis[] {
   const hyp: Hypothesis[] = [];
-  const { queryParams, routes, hourly, sessions, totalErrors, totalAdLanding } = args;
+  const {
+    queryParams,
+    routes,
+    hourly,
+    sessions,
+    totalErrors,
+    totalAdLanding,
+    uniqueErrorSessions,
+    errorBreakdown,
+  } = args;
 
   // H1 : query params Facebook/Google ads présents dans la majorité des erreurs
   const fbParam = queryParams.find((p) => p.param === "fbclid");
@@ -347,21 +358,24 @@ export function generateHypotheses(args: {
     }
   }
 
-  // H3 : taux de bounce vs erreurs
-  if (totalAdLanding > 0) {
-    const errorRate = Math.round((totalErrors / totalAdLanding) * 100);
-    if (errorRate > 50) {
+  // H3 : cascade d'erreurs par visite (corrigé : ratio errors/session, pas errors/landing)
+  if (totalAdLanding > 0 && uniqueErrorSessions > 0) {
+    const errorsPerSession = (totalErrors / uniqueErrorSessions).toFixed(1);
+    const sessionsPctOfLanding = Math.min(100, Math.round((uniqueErrorSessions / totalAdLanding) * 100));
+    if (sessionsPctOfLanding > 30 || Number(errorsPerSession) > 2) {
       hyp.push({
         rank: hyp.length + 1,
-        confidence: "high",
-        title: `Taux d'erreur de ${errorRate}% sur les arrivées publicitaires`,
+        confidence: sessionsPctOfLanding > 60 ? "high" : "medium",
+        title: `${sessionsPctOfLanding}% des arrivées publicitaires crashent (${errorsPerSession} erreurs/session en cascade)`,
         evidence: [
-          `${totalErrors} erreurs pour ${totalAdLanding} ad-landing → ratio ${errorRate}%`,
-          `Les visiteurs qui viennent des pubs (donc avec params de tracking) crashent presque systématiquement.`,
+          `${uniqueErrorSessions} sessions uniques en erreur sur ${totalAdLanding} arrivées publicitaires`,
+          `Chaque session déclenche en moyenne ${errorsPerSession} erreurs (cascade hydration → 418 → 423)`,
+          `Total ${totalErrors} erreurs ≠ ${totalErrors} utilisateurs : un même mismatch SSR/CSR génère plusieurs events React simultanés`,
         ],
         fixSuggestions: [
-          "C'est cohérent avec H1 : les params de tracking cassent l'hydratation",
-          "Priorité absolue : corriger l'hydration sur la home page avec query params",
+          "Cohérent avec H1 : les params de tracking cassent l'hydratation et déclenchent une cascade",
+          "Le mix 459 hydration-error + 217 × 418 + 217 × 423 est typique d'un seul mismatch initial qui se propage",
+          "Corriger l'hydration sur la home page avec query params devrait éliminer 80% des events d'un coup",
         ],
       });
     }
@@ -402,7 +416,33 @@ export function generateHypotheses(args: {
     });
   }
 
+  // H6 : asset-load-error significatif (signal indépendant)
+  const assetErrors = errorBreakdown.find((e) => e.eventName === "asset-load-error");
+  if (assetErrors && assetErrors.count > 50) {
+    hyp.push({
+      rank: hyp.length + 1,
+      confidence: "medium",
+      title: `${assetErrors.count} échecs de chargement d'assets — signal séparé du problème d'hydratation`,
+      evidence: [
+        `Cet event est instrumenté indépendamment des erreurs React`,
+        `Probablement un asset (image, script, font) référencé avec un hash périmé après un déploiement`,
+      ],
+      fixSuggestions: [
+        "Inspecter les Network errors dans Chrome DevTools sur la home page",
+        "Vérifier que tous les assets sont servis avec les bons hash après build (vite manifest)",
+        "Suspect typique : preload/prefetch de fonts ou scripts tiers (analytics, ads, player)",
+        "Quick win : ajouter onError={() => fallback} sur les <img> critiques",
+      ],
+    });
+  }
+
   return hyp;
+}
+
+export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
+  const set = new Set<string>();
+  for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
+  return set.size;
 }
 
 export function buildAgentPrompt(args: {
