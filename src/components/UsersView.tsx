@@ -83,7 +83,7 @@ function SessionRow({ session, range }: { session: UmamiSession; range: ReturnTy
         </td>
         <td className="px-5 py-2.5">
           <span className="inline-flex items-center gap-1.5">
-            <span className="text-base">{flag(session.country)}</span>
+            <Flag code={session.country} />
             <span className="text-xs">{COUNTRY_NAMES[session.country ?? ""] ?? session.country ?? "—"}</span>
             {session.city && <span className="text-[10px] text-muted-foreground">{session.city}</span>}
           </span>
