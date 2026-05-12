@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
+  BarChart3, Brain,
 } from "lucide-react";
+import { DiagnosticView } from "./DiagnosticView";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
@@ -13,8 +15,11 @@ import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
 
+type View = "dashboard" | "diagnostic";
+
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("24h");
+  const [view, setView] = useState<View>("dashboard");
   const range = useMemo(() => getRange(period), [period]);
 
   const counts = useQuery({
