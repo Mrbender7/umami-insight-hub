@@ -72,6 +72,18 @@ for (const [period, range] of Object.entries(periods)) {
       pageSize: 1000,
       orderBy: "createdAt",
     }),
+    countries: await umamiFetch(`/websites/${WEBSITE_ID}/metrics`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+      type: "country",
+      limit: 100,
+    }),
+    sessions: await umamiFetch(`/websites/${WEBSITE_ID}/sessions`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+      pageSize: 200,
+      orderBy: "lastAt",
+    }),
   };
 }
 
