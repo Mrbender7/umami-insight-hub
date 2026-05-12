@@ -1,21 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PasswordGate } from "@/components/PasswordGate";
 import { Dashboard } from "@/components/Dashboard";
 import { isAuthed } from "@/lib/auth";
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Stats Umami — Dashboard analytique privé" },
-      { name: "description", content: "Tableau de bord analytique privé connecté à Umami Cloud." },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
-  component: Index,
-});
-
-function Index() {
+export default function App() {
   const [authed, setAuthed] = useState(false);
   const [ready, setReady] = useState(false);
 
