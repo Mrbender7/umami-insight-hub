@@ -61,6 +61,41 @@ export interface Range {
   unit: "hour" | "day";
 }
 
+interface StaticPeriodData {
+  range: Range;
+  counts: EventCount[];
+  series: EventSeriesPoint[];
+  events: PagedEvents;
+}
+
+interface StaticUmamiData {
+  generatedAt: string;
+  websiteId: string;
+  periods: Record<Period, StaticPeriodData>;
+}
+
+let staticDataPromise: Promise<StaticUmamiData> | null = null;
+
+function getPeriodFromRange(range: Range): Period {
+  const duration = range.endAt - range.startAt;
+  const day = 24 * 60 * 60 * 1000;
+  if (range.unit === "hour") return "24h";
+  return duration <= 8 * day ? "7d" : "30d";
+}
+
+async function loadStaticData(): Promise<StaticUmamiData> {
+  staticDataPromise ??= fetch("./umami-data.json", { headers: { Accept: "application/json" } }).then(
+    async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} ${res.statusText} en lisant umami-data.json. ${text}`);
+      }
+      return res.json() as Promise<StaticUmamiData>;
+    },
+  );
+  return staticDataPromise;
+}
+
 export function getRange(period: Period): Range {
   const endAt = Date.now();
   const day = 24 * 60 * 60 * 1000;
