@@ -3,7 +3,8 @@
 // Optional: VITE_UMAMI_API_URL (defaults to https://cloud.umami.is/api)
 
 const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://cloud.umami.is/api";
-const WEBSITE_ID = (import.meta.env.VITE_UMAMI_WEBSITE_ID as string) || "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
+const WEBSITE_ID =
+  (import.meta.env.VITE_UMAMI_WEBSITE_ID as string) || "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
 const API_TOKEN = (import.meta.env.VITE_UMAMI_API_TOKEN as string) || "";
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
