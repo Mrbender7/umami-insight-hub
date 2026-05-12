@@ -8,7 +8,17 @@ const API_TOKEN = import.meta.env.VITE_UMAMI_API_TOKEN as string;
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY = import.meta.env.VITE_CORS_PROXY !== undefined
   ? (import.meta.env.VITE_CORS_PROXY as string)
-  : "https://corsproxy.io/?";
+  : "https://corsproxy.io/";
+
+function buildProxiedUrl(targetUrl: string) {
+  if (!CORS_PROXY) return targetUrl;
+
+  const proxyUrl = new URL(CORS_PROXY);
+  proxyUrl.searchParams.set("url", targetUrl);
+  proxyUrl.searchParams.append("reqHeaders", `x-umami-api-key:${API_TOKEN}`);
+  proxyUrl.searchParams.append("reqHeaders", "accept:application/json");
+  return proxyUrl.toString();
+}
 
 export function getEnvStatus() {
   return {
@@ -68,13 +78,21 @@ async function umamiFetch<T>(path: string, params: Record<string, string | numbe
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   });
-  const finalUrl = CORS_PROXY ? `${CORS_PROXY}${encodeURIComponent(url.toString())}` : url.toString();
-  const res = await fetch(finalUrl, {
-    headers: {
-      "x-umami-api-key": API_TOKEN,
-      Accept: "application/json",
-    },
-  });
+  const finalUrl = buildProxiedUrl(url.toString());
+  let res: Response;
+  try {
+    res = await fetch(finalUrl, {
+      headers: CORS_PROXY ? undefined : {
+        "x-umami-api-key": API_TOKEN,
+        Accept: "application/json",
+      },
+    });
+  } catch (error) {
+    throw new Error(
+      `Impossible de joindre l'API Umami via ${CORS_PROXY || "l'URL directe"}. ` +
+      `Le proxy CORS peut être indisponible ou bloquer les headers. Détail : ${(error as Error).message}`
+    );
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Umami ${res.status}: ${text || res.statusText}`);
