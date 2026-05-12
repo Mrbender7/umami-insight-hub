@@ -172,7 +172,11 @@ export interface EventDataValue {
   total: number;
 }
 
-export async function getEventDataValues(range: Range, eventName: string, fieldName: string): Promise<EventDataValue[]> {
+export async function getEventDataValues(
+  range: Range,
+  eventName: string,
+  fieldName: string,
+): Promise<EventDataValue[]> {
   return umamiFetch<EventDataValue[]>(`/websites/${WEBSITE_ID}/event-data/values`, {
     startAt: range.startAt,
     endAt: range.endAt,
