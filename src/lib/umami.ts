@@ -5,7 +5,9 @@
 const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://cloud.umami.is/api";
 const WEBSITE_ID =
   (import.meta.env.VITE_UMAMI_WEBSITE_ID as string) || "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
-const API_TOKEN = (import.meta.env.VITE_UMAMI_API_TOKEN as string) || "";
+const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
+const API_TOKEN = API_TOKEN_ENV ?? "";
+const HAS_API_TOKEN = API_TOKEN_ENV !== undefined && API_TOKEN_ENV !== "";
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
@@ -20,8 +22,8 @@ function buildProxiedUrl(targetUrl: string) {
 export function getEnvStatus() {
   return {
     websiteId: !!WEBSITE_ID,
-    apiToken: !!API_TOKEN,
-    apiTokenEmpty: !API_TOKEN,
+    apiToken: HAS_API_TOKEN,
+    apiTokenEmpty: !HAS_API_TOKEN,
     apiUrl: API_URL,
     corsProxy: CORS_PROXY,
   };
