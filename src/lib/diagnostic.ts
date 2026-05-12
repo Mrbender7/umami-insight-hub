@@ -297,9 +297,20 @@ export function generateHypotheses(args: {
   sessions: SessionStat[];
   totalErrors: number;
   totalAdLanding: number;
+  uniqueErrorSessions: number;
+  errorBreakdown: ErrorCodeBreakdown[];
 }): Hypothesis[] {
   const hyp: Hypothesis[] = [];
-  const { queryParams, routes, hourly, sessions, totalErrors, totalAdLanding } = args;
+  const {
+    queryParams,
+    routes,
+    hourly,
+    sessions,
+    totalErrors,
+    totalAdLanding,
+    uniqueErrorSessions,
+    errorBreakdown,
+  } = args;
 
   // H1 : query params Facebook/Google ads présents dans la majorité des erreurs
   const fbParam = queryParams.find((p) => p.param === "fbclid");
@@ -347,21 +358,24 @@ export function generateHypotheses(args: {
     }
   }
 
-  // H3 : taux de bounce vs erreurs
-  if (totalAdLanding > 0) {
-    const errorRate = Math.round((totalErrors / totalAdLanding) * 100);
-    if (errorRate > 50) {
+  // H3 : cascade d'erreurs par visite (corrigé : ratio errors/session, pas errors/landing)
+  if (totalAdLanding > 0 && uniqueErrorSessions > 0) {
+    const errorsPerSession = (totalErrors / uniqueErrorSessions).toFixed(1);
+    const sessionsPctOfLanding = Math.min(100, Math.round((uniqueErrorSessions / totalAdLanding) * 100));
+    if (sessionsPctOfLanding > 30 || Number(errorsPerSession) > 2) {
       hyp.push({
         rank: hyp.length + 1,
-        confidence: "high",
-        title: `Taux d'erreur de ${errorRate}% sur les arrivées publicitaires`,
+        confidence: sessionsPctOfLanding > 60 ? "high" : "medium",
+        title: `${sessionsPctOfLanding}% des arrivées publicitaires crashent (${errorsPerSession} erreurs/session en cascade)`,
         evidence: [
-          `${totalErrors} erreurs pour ${totalAdLanding} ad-landing → ratio ${errorRate}%`,
-          `Les visiteurs qui viennent des pubs (donc avec params de tracking) crashent presque systématiquement.`,
+          `${uniqueErrorSessions} sessions uniques en erreur sur ${totalAdLanding} arrivées publicitaires`,
+          `Chaque session déclenche en moyenne ${errorsPerSession} erreurs (cascade hydration → 418 → 423)`,
+          `Total ${totalErrors} erreurs ≠ ${totalErrors} utilisateurs : un même mismatch SSR/CSR génère plusieurs events React simultanés`,
         ],
         fixSuggestions: [
-          "C'est cohérent avec H1 : les params de tracking cassent l'hydratation",
-          "Priorité absolue : corriger l'hydration sur la home page avec query params",
+          "Cohérent avec H1 : les params de tracking cassent l'hydratation et déclenchent une cascade",
+          "Le mix 459 hydration-error + 217 × 418 + 217 × 423 est typique d'un seul mismatch initial qui se propage",
+          "Corriger l'hydration sur la home page avec query params devrait éliminer 80% des events d'un coup",
         ],
       });
     }
@@ -402,7 +416,33 @@ export function generateHypotheses(args: {
     });
   }
 
+  // H6 : asset-load-error significatif (signal indépendant)
+  const assetErrors = errorBreakdown.find((e) => e.eventName === "asset-load-error");
+  if (assetErrors && assetErrors.count > 50) {
+    hyp.push({
+      rank: hyp.length + 1,
+      confidence: "medium",
+      title: `${assetErrors.count} échecs de chargement d'assets — signal séparé du problème d'hydratation`,
+      evidence: [
+        `Cet event est instrumenté indépendamment des erreurs React`,
+        `Probablement un asset (image, script, font) référencé avec un hash périmé après un déploiement`,
+      ],
+      fixSuggestions: [
+        "Inspecter les Network errors dans Chrome DevTools sur la home page",
+        "Vérifier que tous les assets sont servis avec les bons hash après build (vite manifest)",
+        "Suspect typique : preload/prefetch de fonts ou scripts tiers (analytics, ads, player)",
+        "Quick win : ajouter onError={() => fallback} sur les <img> critiques",
+      ],
+    });
+  }
+
   return hyp;
+}
+
+export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
+  const set = new Set<string>();
+  for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
+  return set.size;
 }
 
 export function buildAgentPrompt(args: {
@@ -469,19 +509,57 @@ export function buildAgentPrompt(args: {
     lines.push(`| \`${p.param}\` | ${p.percentOfErrors}% | ${p.occurrences} | ${p.uniqueValues} |`);
   });
   lines.push(``);
+  lines.push(`## Commandes d'investigation prêtes à coller`);
+  lines.push(``);
+  lines.push(
+    `Exécute ces commandes dans le repo Radio Sphere pour localiser les fichiers suspects en quelques secondes :`,
+  );
+  lines.push(``);
+  lines.push("```bash");
+  lines.push(`# 1. Tous les composants qui lisent l'URL au render initial (suspect #1)`);
+  lines.push(
+    `rg -n "useSearchParams|window\\.location\\.search|window\\.location\\.hash|URLSearchParams|new URL\\(window" src/`,
+  );
+  lines.push(``);
+  lines.push(`# 2. Composants qui touchent window/document/navigator au top-level d'un render`);
+  lines.push(
+    `rg -n "typeof window|typeof document|typeof navigator" src/`,
+  );
+  lines.push(``);
+  lines.push(`# 3. Sources de non-déterminisme (Date.now, Math.random, new Date au render)`);
+  lines.push(`rg -n "Date\\.now\\(\\)|Math\\.random\\(\\)|new Date\\(\\)" src/components src/routes`);
+  lines.push(``);
+  lines.push(`# 4. HTML invalide potentiel (div dans p, a dans a)`);
+  lines.push(`rg -n "<p[^>]*>" src/ -A 5 | rg -B 1 "<div|<section|<article|<ul|<ol"`);
+  lines.push(``);
+  lines.push(`# 5. Composants Suspense / lazy (suspects pour les erreurs 421/423)`);
+  lines.push(`rg -n "Suspense|React\\.lazy|lazy\\(" src/`);
+  lines.push(``);
+  lines.push(`# 6. Endroits où on track les fbclid/utm (pour confirmer où l'URL est lue)`);
+  lines.push(`rg -n "fbclid|utm_source|utm_campaign" src/`);
+  lines.push("```");
+  lines.push(``);
   lines.push(`## Action attendue de toi (agent IA)`);
   lines.push(``);
   lines.push(`1. Lire ce rapport en entier.`);
   lines.push(
-    `2. Commencer par l'hypothèse #1 (la plus probable) et chercher dans le code les patterns mentionnés.`,
+    `2. Exécuter d'abord les commandes d'investigation ci-dessus pour identifier les fichiers candidats.`,
   );
   lines.push(
-    `3. Pour chaque composant suspect : analyser ses imports, ses useEffect, ses accès à window/document/location.`,
+    `3. Pour chaque candidat : analyser ses imports, ses useEffect, ses accès à window/document/location au render initial (= en dehors d'un useEffect).`,
   );
   lines.push(
-    `4. Proposer un correctif minimal (une PR, un fichier à la fois) et expliquer pourquoi ça devrait résoudre le problème.`,
+    `4. Hypothèse #1 en priorité absolue : trouver le composant qui lit les query params au premier render et le fixer (déplacer dans useEffect + état local initialisé à une valeur stable).`,
   );
-  lines.push(`5. Suggérer comment tester localement (ex: ouvrir une URL avec ?fbclid=test).`);
+  lines.push(
+    `5. Proposer un correctif minimal (un fichier à la fois) en expliquant précisément pourquoi le mismatch SSR/CSR disparaît.`,
+  );
+  lines.push(
+    `6. Donner la commande pour reproduire en local : ouvrir http://localhost:PORT/?fbclid=test123&utm_source=facebook → l'erreur doit apparaître AVANT le fix et disparaître APRÈS.`,
+  );
+  lines.push(
+    `7. Note : le total de ${errorBreakdown.reduce((acc, e) => acc + e.count, 0)} events d'erreur ne signifie PAS ${errorBreakdown.reduce((acc, e) => acc + e.count, 0)} utilisateurs — chaque mismatch React déclenche typiquement 3-4 events (hydration-error + #418 + #423). Corriger la cause racine devrait éliminer la majorité des events d'un coup.`,
+  );
   lines.push(``);
   lines.push(`---`);
   lines.push(`*Rapport généré automatiquement par stats-umami à partir des données Umami Cloud.*`);

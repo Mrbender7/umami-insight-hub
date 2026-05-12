@@ -27,6 +27,7 @@ import {
   breakdownErrorCodes,
   generateHypotheses,
   buildAgentPrompt,
+  countUniqueErrorSessions,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
@@ -64,6 +65,7 @@ export function DiagnosticView({ period }: { period: Period }) {
     const adLanding = (counts.data ?? [])
       .filter((c) => c.x === "ad-landing")
       .reduce((acc, c) => acc + c.y, 0);
+    const uniqueErrorSessions = countUniqueErrorSessions(errorEvents);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -71,6 +73,8 @@ export function DiagnosticView({ period }: { period: Period }) {
       sessions,
       totalErrors,
       totalAdLanding: adLanding,
+      uniqueErrorSessions,
+      errorBreakdown,
     });
     return {
       errorEvents,
