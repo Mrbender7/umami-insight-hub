@@ -4,6 +4,7 @@ const OPTIONS: { value: Period; label: string }[] = [
   { value: "24h", label: "24h" },
   { value: "7d", label: "7 jours" },
   { value: "30d", label: "30 jours" },
+  { value: "all", label: "Tout" },
 ];
 
 export function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {

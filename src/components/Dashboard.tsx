@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
-  BarChart3, Brain,
+  BarChart3, Brain, Globe2, Users,
 } from "lucide-react";
 import { DiagnosticView } from "./DiagnosticView";
+import { CountriesView } from "./CountriesView";
+import { UsersView } from "./UsersView";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
@@ -15,7 +17,7 @@ import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
 
-type View = "dashboard" | "diagnostic";
+type View = "dashboard" | "diagnostic" | "countries" | "users";
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("24h");
@@ -73,30 +75,30 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
           <div className="flex items-center gap-2 print:hidden">
             <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
-              <button
-                onClick={() => setView("dashboard")}
-                className={
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
-                  (view === "dashboard"
-                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                <BarChart3 className="size-3.5" />
-                Vue d'ensemble
-              </button>
-              <button
-                onClick={() => setView("diagnostic")}
-                className={
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
-                  (view === "diagnostic"
-                    ? "bg-gradient-neon text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                <Brain className="size-3.5" />
-                Diagnostic
-              </button>
+              {([
+                { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
+                { id: "diagnostic", label: "Diagnostic", icon: Brain },
+                { id: "countries", label: "Pays", icon: Globe2 },
+                { id: "users", label: "Utilisateurs", icon: Users },
+              ] as const).map((tab) => {
+                const Icon = tab.icon;
+                const active = view === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setView(tab.id)}
+                    className={
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
+                      (active
+                        ? "bg-gradient-neon text-primary-foreground shadow-glow"
+                        : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    <Icon className="size-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
             <PeriodSelector value={period} onChange={setPeriod} />
             <button
@@ -125,9 +127,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {view === "diagnostic" ? (
-          <DiagnosticView period={period} />
-        ) : (
+        {view === "diagnostic" && <DiagnosticView period={period} />}
+        {view === "countries" && <CountriesView period={period} />}
+        {view === "users" && <UsersView period={period} />}
+        {view === "dashboard" && (
           <>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Ad landing" value={adLanding.toLocaleString()} icon={MousePointerClick} accent="blue" hint="Visiteurs depuis les pubs" />

@@ -17,6 +17,7 @@ const periods = {
   "24h": { startAt: endAt - day, endAt, unit: "hour" },
   "7d": { startAt: endAt - 7 * day, endAt, unit: "day" },
   "30d": { startAt: endAt - 30 * day, endAt, unit: "day" },
+  "all": { startAt: endAt - 730 * day, endAt, unit: "month" },
 };
 
 async function umamiFetch(path, params = {}) {
@@ -70,6 +71,18 @@ for (const [period, range] of Object.entries(periods)) {
       endAt: range.endAt,
       pageSize: 1000,
       orderBy: "createdAt",
+    }),
+    countries: await umamiFetch(`/websites/${WEBSITE_ID}/metrics`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+      type: "country",
+      limit: 100,
+    }),
+    sessions: await umamiFetch(`/websites/${WEBSITE_ID}/sessions`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+      pageSize: 200,
+      orderBy: "lastAt",
     }),
   };
 }

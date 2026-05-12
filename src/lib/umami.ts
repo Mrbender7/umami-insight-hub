@@ -53,12 +53,12 @@ export const ERROR_EVENTS = [
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
 export type EventName = (typeof ALL_EVENTS)[number];
 
-export type Period = "24h" | "7d" | "30d";
+export type Period = "24h" | "7d" | "30d" | "all";
 
 export interface Range {
   startAt: number;
   endAt: number;
-  unit: "hour" | "day";
+  unit: "hour" | "day" | "month";
 }
 
 interface StaticPeriodData {
@@ -66,6 +66,8 @@ interface StaticPeriodData {
   counts: EventCount[];
   series: EventSeriesPoint[];
   events: PagedEvents;
+  countries?: CountryStat[];
+  sessions?: PagedSessions;
 }
 
 interface StaticUmamiData {
@@ -80,6 +82,7 @@ function getPeriodFromRange(range: Range): Period {
   const duration = range.endAt - range.startAt;
   const day = 24 * 60 * 60 * 1000;
   if (range.unit === "hour") return "24h";
+  if (range.unit === "month") return "all";
   return duration <= 8 * day ? "7d" : "30d";
 }
 
@@ -101,7 +104,9 @@ export function getRange(period: Period): Range {
   const day = 24 * 60 * 60 * 1000;
   if (period === "24h") return { startAt: endAt - day, endAt, unit: "hour" };
   if (period === "7d") return { startAt: endAt - 7 * day, endAt, unit: "day" };
-  return { startAt: endAt - 30 * day, endAt, unit: "day" };
+  if (period === "30d") return { startAt: endAt - 30 * day, endAt, unit: "day" };
+  // "all" — Umami garde l'historique complet ; on prend 2 ans en arrière par sécurité
+  return { startAt: endAt - 730 * day, endAt, unit: "month" };
 }
 
 async function umamiFetch<T>(
@@ -245,4 +250,88 @@ export async function getEventDataFields(range: Range): Promise<EventDataField[]
     startAt: range.startAt,
     endAt: range.endAt,
   });
+}
+
+// ===== Pays / Géographie =====
+export interface CountryStat {
+  x: string; // code ISO
+  y: number; // visites
+}
+
+export async function getCountries(range: Range): Promise<CountryStat[]> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].countries ?? [];
+  }
+  return umamiFetch<CountryStat[]>(`/websites/${WEBSITE_ID}/metrics`, {
+    startAt: range.startAt,
+    endAt: range.endAt,
+    type: "country",
+    limit: 100,
+  });
+}
+
+// ===== Sessions / Utilisateurs anonymes =====
+export interface UmamiSession {
+  id: string;
+  websiteId: string;
+  hostname?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+  screen?: string;
+  language?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  firstAt: string;
+  lastAt: string;
+  visits: number;
+  views: number;
+  events?: number;
+  totaltime?: number;
+  createdAt: string;
+}
+
+export interface PagedSessions {
+  data: UmamiSession[];
+  count: number;
+  pageSize: number;
+  page: number;
+}
+
+export async function getSessions(range: Range, query?: string): Promise<PagedSessions> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].sessions ?? { data: [], count: 0, pageSize: 0, page: 1 };
+  }
+  return umamiFetch<PagedSessions>(`/websites/${WEBSITE_ID}/sessions`, {
+    startAt: range.startAt,
+    endAt: range.endAt,
+    query,
+    pageSize: 200,
+    orderBy: "lastAt",
+  });
+}
+
+export interface SessionActivity {
+  createdAt: string;
+  urlPath: string;
+  urlQuery?: string;
+  referrerDomain?: string;
+  eventId?: string;
+  eventType: number;
+  eventName?: string;
+  visitId: string;
+}
+
+export async function getSessionActivity(
+  range: Range,
+  sessionId: string,
+): Promise<SessionActivity[]> {
+  if (USE_STATIC_DATA) return [];
+  return umamiFetch<SessionActivity[]>(
+    `/websites/${WEBSITE_ID}/sessions/${sessionId}/activity`,
+    { startAt: range.startAt, endAt: range.endAt },
+  );
 }
