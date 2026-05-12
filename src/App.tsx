@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PasswordGate } from "@/components/PasswordGate";
 import { Dashboard } from "@/components/Dashboard";
 import { isAuthed } from "@/lib/auth";
+import { getEnvStatus } from "@/lib/umami";
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
@@ -12,7 +13,26 @@ export default function App() {
     setReady(true);
   }, []);
 
+  const env = getEnvStatus();
+  const missing: string[] = [];
+  if (!env.websiteId) missing.push("VITE_UMAMI_WEBSITE_ID");
+  if (!env.apiToken) missing.push("VITE_UMAMI_API_TOKEN");
+  if (!import.meta.env.VITE_DASHBOARD_PASSWORD) missing.push("VITE_DASHBOARD_PASSWORD");
+
   if (!ready) return <div className="min-h-screen" />;
-  if (!authed) return <PasswordGate onSuccess={() => setAuthed(true)} />;
-  return <Dashboard onLogout={() => setAuthed(false)} />;
+
+  return (
+    <>
+      {missing.length > 0 && (
+        <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm text-center">
+          Variables d'environnement manquantes : {missing.join(", ")}. Vérifiez vos GitHub Secrets et le workflow de build.
+        </div>
+      )}
+      {!authed ? (
+        <PasswordGate onSuccess={() => setAuthed(true)} />
+      ) : (
+        <Dashboard onLogout={() => setAuthed(false)} />
+      )}
+    </>
+  );
 }
