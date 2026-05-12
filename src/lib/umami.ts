@@ -1,4 +1,4 @@
-// Umami Cloud API client (browser-side)
+// Umami Cloud API client
 // Requires: VITE_UMAMI_WEBSITE_ID, VITE_UMAMI_API_TOKEN
 // Optional: VITE_UMAMI_API_URL (defaults to https://cloud.umami.is/api)
 
@@ -8,6 +8,7 @@ const WEBSITE_ID =
 const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
 const API_TOKEN = API_TOKEN_ENV ?? "";
 const HAS_API_TOKEN = API_TOKEN_ENV !== undefined && API_TOKEN_ENV !== "";
+const USE_STATIC_DATA = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
@@ -22,8 +23,8 @@ function buildProxiedUrl(targetUrl: string) {
 export function getEnvStatus() {
   return {
     websiteId: !!WEBSITE_ID,
-    apiToken: HAS_API_TOKEN,
-    apiTokenEmpty: !HAS_API_TOKEN,
+    apiToken: USE_STATIC_DATA || HAS_API_TOKEN,
+    apiTokenEmpty: !USE_STATIC_DATA && !HAS_API_TOKEN,
     apiUrl: API_URL,
     corsProxy: CORS_PROXY,
   };
@@ -58,6 +59,41 @@ export interface Range {
   startAt: number;
   endAt: number;
   unit: "hour" | "day";
+}
+
+interface StaticPeriodData {
+  range: Range;
+  counts: EventCount[];
+  series: EventSeriesPoint[];
+  events: PagedEvents;
+}
+
+interface StaticUmamiData {
+  generatedAt: string;
+  websiteId: string;
+  periods: Record<Period, StaticPeriodData>;
+}
+
+let staticDataPromise: Promise<StaticUmamiData> | null = null;
+
+function getPeriodFromRange(range: Range): Period {
+  const duration = range.endAt - range.startAt;
+  const day = 24 * 60 * 60 * 1000;
+  if (range.unit === "hour") return "24h";
+  return duration <= 8 * day ? "7d" : "30d";
+}
+
+async function loadStaticData(): Promise<StaticUmamiData> {
+  staticDataPromise ??= fetch("./umami-data.json", {
+    headers: { Accept: "application/json" },
+  }).then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} en lisant umami-data.json. ${text}`);
+    }
+    return res.json() as Promise<StaticUmamiData>;
+  });
+  return staticDataPromise;
 }
 
 export function getRange(period: Period): Range {
@@ -110,6 +146,10 @@ export interface EventCount {
 }
 
 export async function getEventCounts(range: Range): Promise<EventCount[]> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].counts;
+  }
   return umamiFetch<EventCount[]>(`/websites/${WEBSITE_ID}/metrics`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -125,6 +165,10 @@ export interface EventSeriesPoint {
 }
 
 export async function getEventSeries(range: Range): Promise<EventSeriesPoint[]> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].series;
+  }
   return umamiFetch<EventSeriesPoint[]>(`/websites/${WEBSITE_ID}/events/series`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -153,6 +197,10 @@ export interface PagedEvents {
 }
 
 export async function getRecentEvents(range: Range, query?: string): Promise<PagedEvents> {
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].events;
+  }
   return umamiFetch<PagedEvents>(`/websites/${WEBSITE_ID}/events`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -175,6 +223,7 @@ export async function getEventDataValues(
   eventName: string,
   fieldName: string,
 ): Promise<EventDataValue[]> {
+  if (USE_STATIC_DATA) return [];
   return umamiFetch<EventDataValue[]>(`/websites/${WEBSITE_ID}/event-data/values`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -191,6 +240,7 @@ export interface EventDataField {
 }
 
 export async function getEventDataFields(range: Range): Promise<EventDataField[]> {
+  if (USE_STATIC_DATA) return [];
   return umamiFetch<EventDataField[]>(`/websites/${WEBSITE_ID}/event-data/fields`, {
     startAt: range.startAt,
     endAt: range.endAt,

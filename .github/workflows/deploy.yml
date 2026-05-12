@@ -4,6 +4,8 @@ on:
   push:
     branches: ["main"] # Vérifie bien que ta branche s'appelle main
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -25,13 +27,19 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Generate Umami data
+        run: npm run generate:umami-data
+        env:
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+          VITE_UMAMI_API_TOKEN: ${{ secrets.VITE_UMAMI_API_TOKEN }}
+
       - name: Build
         run: npm run build
         env:
           VITE_DASHBOARD_PASSWORD: ${{ secrets.VITE_DASHBOARD_PASSWORD }}
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
           VITE_UMAMI_API_TOKEN: ${{ secrets.VITE_UMAMI_API_TOKEN }}
-          VITE_CORS_PROXY: "https://api.allorigins.win/raw?url="
+          VITE_USE_STATIC_UMAMI_DATA: "true"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
