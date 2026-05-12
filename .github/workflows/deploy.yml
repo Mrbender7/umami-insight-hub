@@ -2,10 +2,10 @@ name: Deploy Dashboard to GitHub Pages
 
 on:
   push:
-    branches: ["main"] # Vérifie si ta branche s'appelle main ou master
+    branches: ["main"] # Change en "master" si ta branche principale s'appelle master
   workflow_dispatch:
 
-# Autorisations nécessaires pour GitHub Pages
+# Autorisations pour GitHub Pages
 permissions:
   contents: read
   pages: write
@@ -25,12 +25,13 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        # Le flag --legacy-peer-deps permet de forcer l'installation malgré les conflits React 18/19
+        run: npm install --legacy-peer-deps
 
       - name: Build
         run: npm run build
         env:
-          # Ici, on lie tes secrets GitHub aux variables de l'application
+          # Injection des secrets GitHub dans le build de l'application
           VITE_DASHBOARD_PASSWORD: ${{ secrets.VITE_DASHBOARD_PASSWORD }}
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
           VITE_UMAMI_API_TOKEN: ${{ secrets.VITE_UMAMI_API_TOKEN }}
@@ -41,8 +42,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Le dossier de sortie standard de Vite est 'dist'
-          path: './dist'
+          path: './dist' # Dossier de sortie standard de Vite
 
   deploy:
     environment:
