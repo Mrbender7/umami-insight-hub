@@ -30,6 +30,7 @@ jobs:
       - name: Generate Umami data
         run: npm run generate:umami-data
         env:
+          VITE_UMAMI_API_URL: https://api.umami.is/v1
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
           VITE_UMAMI_API_TOKEN: ${{ secrets.VITE_UMAMI_API_TOKEN }}
 
@@ -37,6 +38,7 @@ jobs:
         run: npm run build
         env:
           VITE_DASHBOARD_PASSWORD: ${{ secrets.VITE_DASHBOARD_PASSWORD }}
+          VITE_UMAMI_API_URL: https://api.umami.is/v1
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
           VITE_UMAMI_API_TOKEN: ${{ secrets.VITE_UMAMI_API_TOKEN }}
           VITE_USE_STATIC_UMAMI_DATA: "true"

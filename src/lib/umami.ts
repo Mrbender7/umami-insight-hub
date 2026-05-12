@@ -2,7 +2,7 @@
 // Requires: VITE_UMAMI_WEBSITE_ID, VITE_UMAMI_API_TOKEN
 // Optional: VITE_UMAMI_API_URL (defaults to https://cloud.umami.is/api)
 
-const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://cloud.umami.is/api";
+const API_URL = (import.meta.env.VITE_UMAMI_API_URL as string) || "https://api.umami.is/v1";
 const WEBSITE_ID =
   (import.meta.env.VITE_UMAMI_WEBSITE_ID as string) || "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
 const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
@@ -122,7 +122,7 @@ async function umamiFetch<T>(
   try {
     res = await fetch(finalUrl, {
       headers: {
-        Authorization: `Bearer ${API_TOKEN}`,
+        "x-umami-api-key": API_TOKEN,
         Accept: "application/json",
       },
     });

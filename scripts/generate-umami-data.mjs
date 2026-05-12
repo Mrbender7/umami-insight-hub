@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const API_URL = process.env.VITE_UMAMI_API_URL || "https://cloud.umami.is/api";
+const API_URL = process.env.VITE_UMAMI_API_URL || "https://api.umami.is/v1";
 const WEBSITE_ID = process.env.VITE_UMAMI_WEBSITE_ID || "73a30cfd-4d45-43c2-b296-c4d3a39cd898";
 const API_TOKEN = process.env.VITE_UMAMI_API_TOKEN;
 const OUTPUT_PATH = resolve("public/umami-data.json");
@@ -41,6 +41,8 @@ async function umamiFetch(path, params = {}) {
 
   return text ? JSON.parse(text) : null;
 }
+
+console.log(`Génération Umami via ${API_URL} pour le site ${WEBSITE_ID}`);
 
 const data = {
   generatedAt: new Date(endAt).toISOString(),
