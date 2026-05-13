@@ -28,6 +28,7 @@ import {
   generateHypotheses,
   buildAgentPrompt,
   countUniqueErrorSessions,
+  analyzeCsrFallback,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
