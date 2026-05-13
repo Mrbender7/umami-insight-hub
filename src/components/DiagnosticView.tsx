@@ -71,6 +71,10 @@ export function DiagnosticView({ period }: { period: Period }) {
       .filter((c) => c.x === "ad-landing")
       .reduce((acc, c) => acc + c.y, 0);
     const uniqueErrorSessions = countUniqueErrorSessions(errorEvents);
+    const hydrationTotal = errorBreakdown
+      .filter((e) => e.eventName.startsWith("hydration-error"))
+      .reduce((acc, e) => acc + e.count, 0);
+    const csrFallback = analyzeCsrFallback(allEvents, hydrationTotal);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -91,6 +95,7 @@ export function DiagnosticView({ period }: { period: Period }) {
       totalErrors,
       adLanding,
       hypotheses,
+      csrFallback,
     };
   }, [events.data, counts.data]);
 
