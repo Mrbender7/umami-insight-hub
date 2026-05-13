@@ -270,6 +270,22 @@ const ERROR_KNOWLEDGE: Record<string, Omit<ErrorCodeBreakdown, "count">> = {
       "Vérifier que le site est servi en HTTPS",
     ],
   },
+  "csr-fallback-triggered": {
+    eventName: "csr-fallback-triggered",
+    meaning:
+      "React a abandonné l'hydratation SSR et re-rendu entièrement la page côté client (client-side rendering fallback). Indicateur d'IMPACT UX direct : flash blanc, perte d'état, dégradation perçue par l'utilisateur.",
+    commonCauses: [
+      "Conséquence directe d'une hydration-error non récupérée (#418/#423 cascade)",
+      "Suspense boundary qui throw pendant l'hydratation",
+      "Mismatch SSR/CSR si grave que React jette tout le tree et recommence",
+    ],
+    fixChecklist: [
+      "Ce n'est PAS une cause racine — c'est le symptôme visible des hydration-error",
+      "Corriger les hydration-error en amont éliminera ces fallback automatiquement",
+      "Mesurer le ratio fallback/hydration-error : >50% = utilisateurs voient un flash",
+      "Vérifier que les sessions qui déclenchent un fallback continuent à naviguer (taux de récupération)",
+    ],
+  },
 };
 
 export function breakdownErrorCodes(counts: EventCount[]): ErrorCodeBreakdown[] {
