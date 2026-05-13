@@ -795,6 +795,26 @@ export function buildAgentPrompt(args: {
       `Ton objectif : identifier le ou les composants fautifs dans le code source et proposer un correctif.`,
   );
   lines.push(``);
+  lines.push(`## ⚠️ Contrainte d'architecture (LIRE EN PREMIER)`);
+  lines.push(``);
+  lines.push(
+    `Le site radiosphere.be est **hébergé statiquement via GitHub Pages**. Il N'Y A PAS de runtime serveur (Node.js / edge function / middleware) capable d'intercepter la requête HTTP avant de servir le HTML.`,
+  );
+  lines.push(``);
+  lines.push(`**Solutions interdites :**`);
+  lines.push(`- ❌ Middleware Next.js / TanStack Start côté serveur`);
+  lines.push(`- ❌ Redirection 301/302 pour stripper les query params (fbclid, utm_*)`);
+  lines.push(`- ❌ Réécriture d'URL via _redirects, vercel.json, netlify.toml`);
+  lines.push(`- ❌ getServerSideProps, loaders SSR, server functions`);
+  lines.push(``);
+  lines.push(`**Solutions autorisées (front-end React uniquement) :**`);
+  lines.push(`- ✅ \`useEffect\` pour absorber les query params APRÈS hydratation`);
+  lines.push(`- ✅ \`history.replaceState\` côté client pour nettoyer l'URL après le premier render`);
+  lines.push(`- ✅ \`useState\` initialisé à une valeur stable (jamais window.location.search au render)`);
+  lines.push(`- ✅ \`suppressHydrationWarning\` ciblé sur les éléments connus pour différer`);
+  lines.push(`- ✅ Render conditionnel \`typeof window !== 'undefined'\` pour le code client-only`);
+  lines.push(`- ✅ Dynamic import avec fallback pour les composants client-only`);
+  lines.push(``);
   lines.push(`## Hypothèses prioritaires (issues de l'analyse)`);
   lines.push(``);
   for (const h of hypotheses) {
