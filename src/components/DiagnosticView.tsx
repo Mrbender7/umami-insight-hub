@@ -106,6 +106,7 @@ export function DiagnosticView({ period }: { period: Period }) {
         errorBreakdown: data.errorBreakdown,
         topRoutes: data.routes,
         topQueryParams: data.queryParams,
+        csrFallback: data.csrFallback,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
