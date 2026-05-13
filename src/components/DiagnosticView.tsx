@@ -605,3 +605,30 @@ function SummaryCard({
     </div>
   );
 }
+
+function CsrStat({
+  label,
+  value,
+  hint,
+  danger,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  danger?: boolean;
+}) {
+  return (
+    <div className="bg-card/20 p-4">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p
+        className={
+          "text-2xl font-bold tracking-tight mt-1 tabular-nums " +
+          (danger ? "text-destructive" : "text-foreground")
+        }
+      >
+        {value}
+      </p>
+      {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
+}
