@@ -53,7 +53,7 @@ export const ERROR_EVENTS = [
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
 export type EventName = (typeof ALL_EVENTS)[number];
 
-export type Period = "24h" | "7d" | "30d" | "all";
+export type Period = "1h" | "6h" | "12h" | "24h" | "7d" | "30d" | "all";
 
 export interface Range {
   startAt: number;
@@ -80,9 +80,13 @@ let staticDataPromise: Promise<StaticUmamiData> | null = null;
 
 function getPeriodFromRange(range: Range): Period {
   const duration = range.endAt - range.startAt;
-  const day = 24 * 60 * 60 * 1000;
-  if (range.unit === "hour") return "24h";
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
   if (range.unit === "month") return "all";
+  if (range.unit === "hour") {
+    // Static data only stocke "24h" pour les périodes courtes ; on retombe dessus.
+    return "24h";
+  }
   return duration <= 8 * day ? "7d" : "30d";
 }
 
@@ -101,7 +105,11 @@ async function loadStaticData(): Promise<StaticUmamiData> {
 
 export function getRange(period: Period): Range {
   const endAt = Date.now();
-  const day = 24 * 60 * 60 * 1000;
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+  if (period === "1h") return { startAt: endAt - hour, endAt, unit: "hour" };
+  if (period === "6h") return { startAt: endAt - 6 * hour, endAt, unit: "hour" };
+  if (period === "12h") return { startAt: endAt - 12 * hour, endAt, unit: "hour" };
   if (period === "24h") return { startAt: endAt - day, endAt, unit: "hour" };
   if (period === "7d") return { startAt: endAt - 7 * day, endAt, unit: "day" };
   if (period === "30d") return { startAt: endAt - 30 * day, endAt, unit: "day" };
