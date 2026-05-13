@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
-  BarChart3, Brain, Globe2, Users,
+  BarChart3, Brain, Globe2, Users, Radio,
 } from "lucide-react";
 import { DiagnosticView } from "./DiagnosticView";
 import { CountriesView } from "./CountriesView";
 import { UsersView } from "./UsersView";
+import { RealtimeView } from "./RealtimeView";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
@@ -17,7 +18,7 @@ import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
 
-type View = "dashboard" | "diagnostic" | "countries" | "users";
+type View = "dashboard" | "realtime" | "diagnostic" | "countries" | "users";
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("24h");
@@ -77,6 +78,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
               {([
                 { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
+                { id: "realtime", label: "Temps réel", icon: Radio },
                 { id: "diagnostic", label: "Diagnostic", icon: Brain },
                 { id: "countries", label: "Pays", icon: Globe2 },
                 { id: "users", label: "Utilisateurs", icon: Users },
@@ -127,6 +129,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {view === "realtime" && <RealtimeView />}
         {view === "diagnostic" && <DiagnosticView period={period} />}
         {view === "countries" && <CountriesView period={period} />}
         {view === "users" && <UsersView period={period} />}

@@ -333,6 +333,63 @@ export interface SessionActivity {
   visitId: string;
 }
 
+// ===== Realtime =====
+export interface RealtimeVisitor {
+  id?: string;
+  sessionId?: string;
+  country?: string;
+  city?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+  views?: number;
+  createdAt?: string;
+  lastAt?: string;
+}
+
+export interface RealtimePageview {
+  id?: string;
+  sessionId?: string;
+  urlPath?: string;
+  urlQuery?: string;
+  referrerDomain?: string;
+  country?: string;
+  createdAt: string;
+}
+
+export interface RealtimeEventItem {
+  id?: string;
+  sessionId?: string;
+  urlPath?: string;
+  eventName?: string;
+  createdAt: string;
+}
+
+export interface RealtimeCountryItem {
+  x: string;
+  y: number;
+}
+
+export interface RealtimeData {
+  visitors: RealtimeVisitor[] | number;
+  pageviews?: RealtimePageview[];
+  events?: RealtimeEventItem[];
+  countries?: RealtimeCountryItem[];
+  referrers?: { x: string; y: number }[];
+  urls?: { x: string; y: number }[];
+  timestamp?: number;
+}
+
+export async function getRealtime(startAt?: number): Promise<RealtimeData> {
+  if (USE_STATIC_DATA) {
+    return { visitors: [], pageviews: [], events: [], countries: [], referrers: [], urls: [] };
+  }
+  const start = startAt ?? Date.now() - 30 * 60 * 1000;
+  return umamiFetch<RealtimeData>(`/websites/${WEBSITE_ID}/realtime`, {
+    startAt: start,
+  });
+}
+
 export async function getSessionActivity(
   range: Range,
   sessionId: string,
