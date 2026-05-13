@@ -270,6 +270,22 @@ const ERROR_KNOWLEDGE: Record<string, Omit<ErrorCodeBreakdown, "count">> = {
       "Vérifier que le site est servi en HTTPS",
     ],
   },
+  "csr-fallback-triggered": {
+    eventName: "csr-fallback-triggered",
+    meaning:
+      "React a abandonné l'hydratation SSR et re-rendu entièrement la page côté client (client-side rendering fallback). Indicateur d'IMPACT UX direct : flash blanc, perte d'état, dégradation perçue par l'utilisateur.",
+    commonCauses: [
+      "Conséquence directe d'une hydration-error non récupérée (#418/#423 cascade)",
+      "Suspense boundary qui throw pendant l'hydratation",
+      "Mismatch SSR/CSR si grave que React jette tout le tree et recommence",
+    ],
+    fixChecklist: [
+      "Ce n'est PAS une cause racine — c'est le symptôme visible des hydration-error",
+      "Corriger les hydration-error en amont éliminera ces fallback automatiquement",
+      "Mesurer le ratio fallback/hydration-error : >50% = utilisateurs voient un flash",
+      "Vérifier que les sessions qui déclenchent un fallback continuent à naviguer (taux de récupération)",
+    ],
+  },
 };
 
 export function breakdownErrorCodes(counts: EventCount[]): ErrorCodeBreakdown[] {
@@ -436,7 +452,99 @@ export function generateHypotheses(args: {
     });
   }
 
+  // H7 : CSR fallback déclenché — impact UX visible
+  const csrFallback = errorBreakdown.find((e) => e.eventName === "csr-fallback-triggered");
+  const hydrationTotal = errorBreakdown
+    .filter((e) => e.eventName.startsWith("hydration-error"))
+    .reduce((acc, e) => acc + e.count, 0);
+  if (csrFallback && csrFallback.count > 0) {
+    const ratio = hydrationTotal > 0 ? Math.round((csrFallback.count / hydrationTotal) * 100) : 0;
+    hyp.push({
+      rank: hyp.length + 1,
+      confidence: csrFallback.count > 50 ? "high" : "medium",
+      title: `${csrFallback.count} CSR fallback déclenchés — impact UX visible (flash blanc, perte d'état)`,
+      evidence: [
+        `${csrFallback.count} fois React a abandonné l'hydratation et re-rendu côté client`,
+        hydrationTotal > 0
+          ? `Ratio fallback/hydration-error = ${ratio}% — ${ratio > 50 ? "la majorité" : "une partie"} des mismatchs aboutissent à un re-render complet visible par l'utilisateur`
+          : `Pas d'hydration-error associé — possible déclenchement direct via Suspense throw`,
+        `C'est le SYMPTÔME UX, pas la cause. Les utilisateurs voient un flash et perdent leur scroll/état local.`,
+      ],
+      fixSuggestions: [
+        "Ne pas chercher à supprimer le fallback : c'est React qui se protège.",
+        "Corriger les hydration-error en amont (cf. H1) → ces fallbacks disparaîtront automatiquement.",
+        "Ajouter un loader/skeleton pendant le re-render CSR pour masquer le flash si le fix prend du temps.",
+        "Vérifier dans Umami si les sessions qui déclenchent un fallback continuent à naviguer (= récupération) ou bouncent (= échec UX).",
+      ],
+    });
+  }
+
   return hyp;
+}
+
+export interface CsrFallbackImpact {
+  total: number;
+  uniqueSessions: number;
+  ratioToHydration: number;
+  topRoutes: { path: string; count: number }[];
+  queryParamCorrelation: { param: string; pctOfFallbacks: number }[];
+  recoveryRate: number; // % sessions avec event après le fallback
+}
+
+export function analyzeCsrFallback(
+  allEvents: UmamiEvent[],
+  hydrationTotal: number,
+): CsrFallbackImpact {
+  const fallbacks = allEvents.filter((e) => e.eventName === "csr-fallback-triggered");
+  const total = fallbacks.length;
+  const sessionIds = new Set<string>();
+  const routeMap = new Map<string, number>();
+  const paramMap = new Map<string, number>();
+  for (const f of fallbacks) {
+    if (f.sessionId) sessionIds.add(f.sessionId);
+    const path = f.urlPath || "/";
+    routeMap.set(path, (routeMap.get(path) ?? 0) + 1);
+    const params = parseQuery(f.urlQuery);
+    for (const k of Object.keys(params)) {
+      paramMap.set(k, (paramMap.get(k) ?? 0) + 1);
+    }
+  }
+  // Recovery : sessions où il existe au moins 1 event APRÈS le timestamp du dernier fallback
+  let recovered = 0;
+  for (const sid of sessionIds) {
+    const sessionEvents = allEvents.filter((e) => e.sessionId === sid);
+    const lastFallback = Math.max(
+      ...sessionEvents
+        .filter((e) => e.eventName === "csr-fallback-triggered")
+        .map((e) => new Date(e.createdAt).getTime()),
+    );
+    const hasAfter = sessionEvents.some(
+      (e) =>
+        e.eventName !== "csr-fallback-triggered" &&
+        new Date(e.createdAt).getTime() > lastFallback,
+    );
+    if (hasAfter) recovered += 1;
+  }
+  return {
+    total,
+    uniqueSessions: sessionIds.size,
+    ratioToHydration: hydrationTotal > 0 ? Math.round((total / hydrationTotal) * 100) : 0,
+    topRoutes: Array.from(routeMap.entries())
+      .map(([path, count]) => ({ path, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    queryParamCorrelation:
+      total > 0
+        ? Array.from(paramMap.entries())
+            .map(([param, count]) => ({
+              param,
+              pctOfFallbacks: Math.round((count / total) * 100),
+            }))
+            .sort((a, b) => b.pctOfFallbacks - a.pctOfFallbacks)
+            .slice(0, 8)
+        : [],
+    recoveryRate: sessionIds.size > 0 ? Math.round((recovered / sessionIds.size) * 100) : 0,
+  };
 }
 
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
@@ -450,10 +558,11 @@ export function buildAgentPrompt(args: {
   errorBreakdown: ErrorCodeBreakdown[];
   topRoutes: RouteStat[];
   topQueryParams: QueryParamStat[];
+  csrFallback?: CsrFallbackImpact;
   period: string;
   generatedAt: string;
 }): string {
-  const { hypotheses, errorBreakdown, topRoutes, topQueryParams, period, generatedAt } = args;
+  const { hypotheses, errorBreakdown, topRoutes, topQueryParams, csrFallback, period, generatedAt } = args;
   const lines: string[] = [];
   lines.push(`# Rapport de diagnostic — radiosphere.be`);
   lines.push(``);
@@ -509,6 +618,42 @@ export function buildAgentPrompt(args: {
     lines.push(`| \`${p.param}\` | ${p.percentOfErrors}% | ${p.occurrences} | ${p.uniqueValues} |`);
   });
   lines.push(``);
+  if (csrFallback && csrFallback.total > 0) {
+    lines.push(`## Impact UX — CSR fallback déclenché`);
+    lines.push(``);
+    lines.push(
+      `Quand React n'arrive pas à hydrater, il abandonne le HTML serveur et re-rend tout côté client. ` +
+        `C'est visible par l'utilisateur (flash blanc, perte de scroll/état). Indicateur d'IMPACT, pas de cause.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total fallbacks** : ${csrFallback.total}`);
+    lines.push(`- **Sessions uniques touchées** : ${csrFallback.uniqueSessions}`);
+    lines.push(
+      `- **Ratio fallback / hydration-error** : ${csrFallback.ratioToHydration}% ${csrFallback.ratioToHydration > 50 ? "→ la majorité des mismatchs cassent l'UX" : "→ React récupère souvent sans re-render complet"}`,
+    );
+    lines.push(
+      `- **Taux de récupération** : ${csrFallback.recoveryRate}% des sessions continuent à naviguer après le fallback ${csrFallback.recoveryRate < 50 ? "→ ALERTE : la moitié bouncent" : "→ utilisateurs résilients"}`,
+    );
+    lines.push(``);
+    if (csrFallback.topRoutes.length > 0) {
+      lines.push(`**Routes les plus touchées :**`);
+      lines.push(``);
+      lines.push(`| Route | Fallbacks |`);
+      lines.push(`|---|---:|`);
+      csrFallback.topRoutes.forEach((r) => lines.push(`| \`${r.path}\` | ${r.count} |`));
+      lines.push(``);
+    }
+    if (csrFallback.queryParamCorrelation.length > 0) {
+      lines.push(`**Query params corrélés aux fallbacks :**`);
+      lines.push(``);
+      lines.push(`| Param | % des fallbacks |`);
+      lines.push(`|---|---:|`);
+      csrFallback.queryParamCorrelation.forEach((p) =>
+        lines.push(`| \`${p.param}\` | ${p.pctOfFallbacks}% |`),
+      );
+      lines.push(``);
+    }
+  }
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(

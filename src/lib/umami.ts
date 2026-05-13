@@ -48,6 +48,7 @@ export const ERROR_EVENTS = [
   "asset-load-error",
   "route-error-open-external",
   "route-error-copy-link",
+  "csr-fallback-triggered",
 ] as const;
 
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
