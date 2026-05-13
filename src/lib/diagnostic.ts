@@ -558,10 +558,11 @@ export function buildAgentPrompt(args: {
   errorBreakdown: ErrorCodeBreakdown[];
   topRoutes: RouteStat[];
   topQueryParams: QueryParamStat[];
+  csrFallback?: CsrFallbackImpact;
   period: string;
   generatedAt: string;
 }): string {
-  const { hypotheses, errorBreakdown, topRoutes, topQueryParams, period, generatedAt } = args;
+  const { hypotheses, errorBreakdown, topRoutes, topQueryParams, csrFallback, period, generatedAt } = args;
   const lines: string[] = [];
   lines.push(`# Rapport de diagnostic — radiosphere.be`);
   lines.push(``);
