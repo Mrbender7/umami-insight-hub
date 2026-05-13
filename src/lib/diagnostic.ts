@@ -541,6 +541,10 @@ export function buildAgentPrompt(args: {
   lines.push(``);
   lines.push(`## Action attendue de toi (agent IA)`);
   lines.push(``);
+  lines.push(
+    `> ⚠️ **Avant de modifier quoi que ce soit, lance d'abord les commandes \`rg\` ci-dessus et colle-moi leur sortie. On décidera du fix ensemble à partir des fichiers candidats — pas de \`useEffect\` saupoudré au hasard.**`,
+  );
+  lines.push(``);
   lines.push(`1. Lire ce rapport en entier.`);
   lines.push(
     `2. Exécuter d'abord les commandes d'investigation ci-dessus pour identifier les fichiers candidats.`,
