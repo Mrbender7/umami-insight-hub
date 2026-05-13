@@ -31,6 +31,9 @@ import {
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
+  "1h": "Dernière heure",
+  "6h": "6 dernières heures",
+  "12h": "12 dernières heures",
   "24h": "Dernières 24 heures",
   "7d": "7 derniers jours",
   "30d": "30 derniers jours",
