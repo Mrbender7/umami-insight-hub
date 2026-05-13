@@ -15,6 +15,7 @@ import {
   getEventCounts,
   getEventSeries,
   getRecentEvents,
+  getSessions,
   getRange,
   type Period,
 } from "@/lib/umami";
@@ -29,6 +30,9 @@ import {
   buildAgentPrompt,
   countUniqueErrorSessions,
   analyzeCsrFallback,
+  analyzeInAppBrowsers,
+  analyzeBounceImpact,
+  analyzeSuspenseTiming,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
@@ -57,9 +61,14 @@ export function DiagnosticView({ period }: { period: Period }) {
     queryKey: ["umami-series", period],
     queryFn: () => getEventSeries(range),
   });
+  const sessionsQ = useQuery({
+    queryKey: ["umami-sessions", period],
+    queryFn: () => getSessions(range),
+  });
 
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
+    const allSessions = sessionsQ.data?.data ?? [];
     const errorEvents = filterErrorEvents(allEvents);
     const queryParams = analyzeQueryParams(errorEvents);
     const routes = analyzeRoutes(errorEvents);
@@ -75,6 +84,9 @@ export function DiagnosticView({ period }: { period: Period }) {
       .filter((e) => e.eventName.startsWith("hydration-error"))
       .reduce((acc, e) => acc + e.count, 0);
     const csrFallback = analyzeCsrFallback(allEvents, hydrationTotal);
+    const inAppBrowsers = analyzeInAppBrowsers(allEvents, allSessions);
+    const bounceImpact = analyzeBounceImpact(allEvents, allSessions);
+    const suspenseTiming = analyzeSuspenseTiming(allEvents);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -96,8 +108,11 @@ export function DiagnosticView({ period }: { period: Period }) {
       adLanding,
       hypotheses,
       csrFallback,
+      inAppBrowsers,
+      bounceImpact,
+      suspenseTiming,
     };
-  }, [events.data, counts.data]);
+  }, [events.data, counts.data, sessionsQ.data]);
 
   const agentPrompt = useMemo(
     () =>
@@ -107,6 +122,9 @@ export function DiagnosticView({ period }: { period: Period }) {
         topRoutes: data.routes,
         topQueryParams: data.queryParams,
         csrFallback: data.csrFallback,
+        inAppBrowsers: data.inAppBrowsers,
+        bounceImpact: data.bounceImpact,
+        suspenseTiming: data.suspenseTiming,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
@@ -123,7 +141,7 @@ export function DiagnosticView({ period }: { period: Period }) {
     }
   }
 
-  const isLoading = counts.isLoading || events.isLoading || series.isLoading;
+  const isLoading = counts.isLoading || events.isLoading || series.isLoading || sessionsQ.isLoading;
   const peakHour = data.hourly.reduce(
     (m, b) => (b.total > m.total ? b : m),
     data.hourly[0] ?? { hour: 0, total: 0, byType: {} },
@@ -382,6 +400,122 @@ export function DiagnosticView({ period }: { period: Period }) {
         </section>
       )}
 
+      {/* Environnements (in-app browsers) */}
+      {data.inAppBrowsers.totalSessionsWith418Fbclid > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Environnements — sessions avec #418 + fbclid
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {data.inAppBrowsers.totalSessionsWith418Fbclid} sessions concernées ·{" "}
+              <span className={data.inAppBrowsers.inAppShare > 50 ? "text-destructive font-semibold" : "text-warning"}>
+                {data.inAppBrowsers.inAppShare}% navigateur in-app social
+              </span>
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-px bg-border/40">
+            <RankList title="Navigateurs" items={data.inAppBrowsers.topBrowsers} />
+            <RankList title="OS" items={data.inAppBrowsers.topOs} />
+            <RankList title="Devices" items={data.inAppBrowsers.topDevices} />
+          </div>
+        </section>
+      )}
+
+      {/* Bounce impact */}
+      {(data.bounceImpact.cleanSessions > 0 || data.bounceImpact.cascadeSessions > 0) && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Impact comportemental — bounce stratifié
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Sessions saines vs cascade d'erreurs (≥3) vs non-récupérées après fallback CSR
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-card/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-5 py-3">Cohorte</th>
+                <th className="text-right font-medium px-5 py-3">Sessions</th>
+                <th className="text-right font-medium px-5 py-3">Bounce</th>
+                <th className="text-right font-medium px-5 py-3">Durée méd.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-border/40">
+                <td className="px-5 py-2.5 text-xs">Sans erreur</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.cleanSessions}</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.cleanBounceRate}%</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.cleanMedianDuration}s</td>
+              </tr>
+              <tr className="border-t border-border/40">
+                <td className="px-5 py-2.5 text-xs">Cascade ≥3 erreurs</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.cascadeSessions}</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">
+                  <span
+                    className={
+                      data.bounceImpact.cascadeBounceRate > data.bounceImpact.cleanBounceRate + 10
+                        ? "text-destructive font-semibold"
+                        : ""
+                    }
+                  >
+                    {data.bounceImpact.cascadeBounceRate}%
+                  </span>
+                </td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.cascadeMedianDuration}s</td>
+              </tr>
+              <tr className="border-t border-border/40">
+                <td className="px-5 py-2.5 text-xs">Non-récupérées (post-fallback)</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.nonRecoveredAfterFallback}</td>
+                <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">—</td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{data.bounceImpact.nonRecoveredMedianDuration}s</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* Suspense timing */}
+      {data.suspenseTiming.some((s) => s.total > 0) && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Chronologie Suspense (#421 / #423)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Délai entre arrivée et erreur — &lt;500ms = rendu initial · ≥500ms = clic précoce
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-card/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-5 py-3">Code</th>
+                <th className="text-right font-medium px-5 py-3">Total</th>
+                <th className="text-right font-medium px-5 py-3">Immédiat</th>
+                <th className="text-right font-medium px-5 py-3">Tardif</th>
+                <th className="text-right font-medium px-5 py-3">Médiane</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.suspenseTiming
+                .filter((s) => s.total > 0)
+                .map((s) => (
+                  <tr key={s.eventName} className="border-t border-border/40">
+                    <td className="px-5 py-2.5 font-mono text-xs">{s.eventName}</td>
+                    <td className="px-5 py-2.5 text-right tabular-nums font-semibold">{s.total}</td>
+                    <td className="px-5 py-2.5 text-right tabular-nums">
+                      {s.immediateCount} ({s.immediatePct}%)
+                    </td>
+                    <td className="px-5 py-2.5 text-right tabular-nums">{s.delayedCount}</td>
+                    <td className="px-5 py-2.5 text-right tabular-nums">{s.medianDelayMs}ms</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {/* Query params */}
       <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
         <div className="px-5 py-4 border-b border-border/60 flex items-center gap-2">
@@ -629,6 +763,34 @@ function CsrStat({
         {value}
       </p>
       {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function RankList({
+  title,
+  items,
+}: {
+  title: string;
+  items: { name: string; count: number; pct: number }[];
+}) {
+  return (
+    <div className="bg-card/20 p-5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">—</p>
+      ) : (
+        <ul className="space-y-1 text-xs">
+          {items.slice(0, 6).map((it) => (
+            <li key={it.name} className="flex justify-between gap-3">
+              <span className="text-foreground/80 truncate">{it.name}</span>
+              <span className="tabular-nums font-semibold">
+                {it.count} <span className="text-muted-foreground">({it.pct}%)</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

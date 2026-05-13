@@ -1,7 +1,7 @@
 // Analyse approfondie des erreurs Umami pour radiosphere.be
 // Toutes les fonctions sont pures et opèrent sur les données déjà chargées.
 
-import { ERROR_EVENTS, type UmamiEvent, type EventCount } from "./umami";
+import { ERROR_EVENTS, type UmamiEvent, type EventCount, type UmamiSession } from "./umami";
 
 export interface QueryParamStat {
   param: string;
@@ -346,7 +346,7 @@ export function generateHypotheses(args: {
       fixSuggestions: [
         "Chercher dans le code : useSearchParams, window.location.search, URLSearchParams au render initial",
         "Si trouvé : wrapper le composant dans useEffect ou utiliser un dynamic import { ssr: false }",
-        "Alternative rapide : nettoyer l'URL côté serveur via un middleware (rediriger sans le param de tracking) ou via un useEffect qui fait history.replaceState",
+        "GitHub Pages = pas de middleware serveur possible. Le seul nettoyage d'URL faisable est CÔTÉ CLIENT via un useEffect qui appelle history.replaceState pour stripper fbclid/utm_* après l'hydratation.",
         "Tester en local : ouvrir https://radiosphere.be/?fbclid=test123 doit reproduire l'erreur",
       ],
     });
@@ -547,6 +547,210 @@ export function analyzeCsrFallback(
   };
 }
 
+// ===================== Enrichissements (analyses croisées) =====================
+
+export interface InAppBrowserStat {
+  totalSessionsWith418Fbclid: number;
+  topBrowsers: { name: string; count: number; pct: number }[];
+  topOs: { name: string; count: number; pct: number }[];
+  topDevices: { name: string; count: number; pct: number }[];
+  inAppShare: number; // % de sessions identifiées comme in-app browser (FB/IG/TikTok/LinkedIn)
+}
+
+const IN_APP_BROWSER_HINTS = [
+  "facebook",
+  "fban",
+  "fbav",
+  "instagram",
+  "tiktok",
+  "linkedin",
+  "snapchat",
+  "wechat",
+  "line",
+  "pinterest",
+];
+
+function isInAppBrowser(s: UmamiSession): boolean {
+  const hay = `${s.browser ?? ""} ${s.device ?? ""}`.toLowerCase();
+  return IN_APP_BROWSER_HINTS.some((h) => hay.includes(h));
+}
+
+export function analyzeInAppBrowsers(
+  allEvents: UmamiEvent[],
+  sessions: UmamiSession[],
+): InAppBrowserStat {
+  // Sessions ayant à la fois un event 418 ET un fbclid dans une URL d'erreur
+  const target = new Set<string>();
+  const sessionsWith418 = new Set<string>();
+  const sessionsWithFbclid = new Set<string>();
+  for (const e of allEvents) {
+    if (!e.sessionId) continue;
+    if (e.eventName === "hydration-error-418") sessionsWith418.add(e.sessionId);
+    const params = parseQuery(e.urlQuery);
+    if (params.fbclid) sessionsWithFbclid.add(e.sessionId);
+  }
+  for (const sid of sessionsWith418) {
+    if (sessionsWithFbclid.has(sid)) target.add(sid);
+  }
+  const matched = sessions.filter((s) => target.has(s.id));
+  const total = matched.length;
+  const tally = (key: keyof UmamiSession) => {
+    const map = new Map<string, number>();
+    for (const s of matched) {
+      const v = (s[key] as string | undefined) || "Inconnu";
+      map.set(v, (map.get(v) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  };
+  const inApp = matched.filter(isInAppBrowser).length;
+  return {
+    totalSessionsWith418Fbclid: total,
+    topBrowsers: tally("browser"),
+    topOs: tally("os"),
+    topDevices: tally("device"),
+    inAppShare: total > 0 ? Math.round((inApp / total) * 100) : 0,
+  };
+}
+
+export interface BounceImpactStat {
+  cleanSessions: number;
+  cleanBounceRate: number;
+  cleanMedianDuration: number; // secondes
+  cascadeSessions: number; // ≥3 events d'erreur
+  cascadeBounceRate: number;
+  cascadeMedianDuration: number;
+  nonRecoveredAfterFallback: number;
+  nonRecoveredMedianDuration: number;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+export function analyzeBounceImpact(
+  allEvents: UmamiEvent[],
+  sessions: UmamiSession[],
+): BounceImpactStat {
+  // Compte d'events d'erreur par session
+  const errorCountBySession = new Map<string, number>();
+  for (const e of allEvents) {
+    if (e.sessionId && ERROR_SET.has(e.eventName)) {
+      errorCountBySession.set(e.sessionId, (errorCountBySession.get(e.sessionId) ?? 0) + 1);
+    }
+  }
+  // Sessions non-récupérées après un fallback (aucun event après le dernier fallback)
+  const nonRecovered = new Set<string>();
+  const fallbackSessions = new Set<string>();
+  for (const e of allEvents) {
+    if (e.sessionId && e.eventName === "csr-fallback-triggered") fallbackSessions.add(e.sessionId);
+  }
+  for (const sid of fallbackSessions) {
+    const ev = allEvents.filter((e) => e.sessionId === sid);
+    const lastFb = Math.max(
+      ...ev.filter((e) => e.eventName === "csr-fallback-triggered").map((e) => new Date(e.createdAt).getTime()),
+    );
+    const after = ev.some(
+      (e) => e.eventName !== "csr-fallback-triggered" && new Date(e.createdAt).getTime() > lastFb,
+    );
+    if (!after) nonRecovered.add(sid);
+  }
+
+  const clean: UmamiSession[] = [];
+  const cascade: UmamiSession[] = [];
+  const nonReco: UmamiSession[] = [];
+  for (const s of sessions) {
+    const ec = errorCountBySession.get(s.id) ?? 0;
+    if (ec === 0) clean.push(s);
+    else if (ec >= 3) cascade.push(s);
+    if (nonRecovered.has(s.id)) nonReco.push(s);
+  }
+  const bounceRate = (group: UmamiSession[]) => {
+    if (group.length === 0) return 0;
+    const bounced = group.filter((s) => (s.views ?? 0) <= 1).length;
+    return Math.round((bounced / group.length) * 100);
+  };
+  const medDur = (group: UmamiSession[]) =>
+    median(group.map((s) => s.totaltime ?? 0).filter((v) => v >= 0));
+
+  return {
+    cleanSessions: clean.length,
+    cleanBounceRate: bounceRate(clean),
+    cleanMedianDuration: medDur(clean),
+    cascadeSessions: cascade.length,
+    cascadeBounceRate: bounceRate(cascade),
+    cascadeMedianDuration: medDur(cascade),
+    nonRecoveredAfterFallback: nonReco.length,
+    nonRecoveredMedianDuration: medDur(nonReco),
+  };
+}
+
+export interface SuspenseTimingStat {
+  eventName: "hydration-error-421" | "hydration-error-423";
+  total: number;
+  immediateCount: number; // <500ms après l'arrivée sur la page
+  delayedCount: number; // ≥500ms (probable interaction utilisateur)
+  unknownCount: number; // pas de pageview de référence
+  medianDelayMs: number;
+  immediatePct: number;
+}
+
+export function analyzeSuspenseTiming(allEvents: UmamiEvent[]): SuspenseTimingStat[] {
+  const targets: Array<SuspenseTimingStat["eventName"]> = [
+    "hydration-error-421",
+    "hydration-error-423",
+  ];
+  // Indexe les events par session
+  const bySession = new Map<string, UmamiEvent[]>();
+  for (const e of allEvents) {
+    if (!e.sessionId) continue;
+    (bySession.get(e.sessionId) ?? bySession.set(e.sessionId, []).get(e.sessionId)!).push(e);
+  }
+  for (const list of bySession.values()) {
+    list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+  return targets.map((name) => {
+    const delays: number[] = [];
+    let immediate = 0;
+    let delayed = 0;
+    let unknown = 0;
+    let total = 0;
+    for (const list of bySession.values()) {
+      // référence : premier event de la session (souvent pageview en eventType=1)
+      const ref = list[0];
+      if (!ref) continue;
+      const refT = new Date(ref.createdAt).getTime();
+      for (const e of list) {
+        if (e.eventName !== name) continue;
+        total += 1;
+        const t = new Date(e.createdAt).getTime();
+        const delta = t - refT;
+        if (Number.isNaN(delta) || delta < 0) {
+          unknown += 1;
+          continue;
+        }
+        delays.push(delta);
+        if (delta < 500) immediate += 1;
+        else delayed += 1;
+      }
+    }
+    return {
+      eventName: name,
+      total,
+      immediateCount: immediate,
+      delayedCount: delayed,
+      unknownCount: unknown,
+      medianDelayMs: median(delays),
+      immediatePct: total > 0 ? Math.round((immediate / total) * 100) : 0,
+    };
+  });
+}
+
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
   const set = new Set<string>();
   for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
@@ -559,10 +763,24 @@ export function buildAgentPrompt(args: {
   topRoutes: RouteStat[];
   topQueryParams: QueryParamStat[];
   csrFallback?: CsrFallbackImpact;
+  inAppBrowsers?: InAppBrowserStat;
+  bounceImpact?: BounceImpactStat;
+  suspenseTiming?: SuspenseTimingStat[];
   period: string;
   generatedAt: string;
 }): string {
-  const { hypotheses, errorBreakdown, topRoutes, topQueryParams, csrFallback, period, generatedAt } = args;
+  const {
+    hypotheses,
+    errorBreakdown,
+    topRoutes,
+    topQueryParams,
+    csrFallback,
+    inAppBrowsers,
+    bounceImpact,
+    suspenseTiming,
+    period,
+    generatedAt,
+  } = args;
   const lines: string[] = [];
   lines.push(`# Rapport de diagnostic — radiosphere.be`);
   lines.push(``);
@@ -576,6 +794,26 @@ export function buildAgentPrompt(args: {
       `Ce rapport est issu de l'analyse des données Umami Cloud (events instrumentés sur le site). ` +
       `Ton objectif : identifier le ou les composants fautifs dans le code source et proposer un correctif.`,
   );
+  lines.push(``);
+  lines.push(`## ⚠️ Contrainte d'architecture (LIRE EN PREMIER)`);
+  lines.push(``);
+  lines.push(
+    `Le site radiosphere.be est **hébergé statiquement via GitHub Pages**. Il N'Y A PAS de runtime serveur (Node.js / edge function / middleware) capable d'intercepter la requête HTTP avant de servir le HTML.`,
+  );
+  lines.push(``);
+  lines.push(`**Solutions interdites :**`);
+  lines.push(`- ❌ Middleware Next.js / TanStack Start côté serveur`);
+  lines.push(`- ❌ Redirection 301/302 pour stripper les query params (fbclid, utm_*)`);
+  lines.push(`- ❌ Réécriture d'URL via _redirects, vercel.json, netlify.toml`);
+  lines.push(`- ❌ getServerSideProps, loaders SSR, server functions`);
+  lines.push(``);
+  lines.push(`**Solutions autorisées (front-end React uniquement) :**`);
+  lines.push(`- ✅ \`useEffect\` pour absorber les query params APRÈS hydratation`);
+  lines.push(`- ✅ \`history.replaceState\` côté client pour nettoyer l'URL après le premier render`);
+  lines.push(`- ✅ \`useState\` initialisé à une valeur stable (jamais window.location.search au render)`);
+  lines.push(`- ✅ \`suppressHydrationWarning\` ciblé sur les éléments connus pour différer`);
+  lines.push(`- ✅ Render conditionnel \`typeof window !== 'undefined'\` pour le code client-only`);
+  lines.push(`- ✅ Dynamic import avec fallback pour les composants client-only`);
   lines.push(``);
   lines.push(`## Hypothèses prioritaires (issues de l'analyse)`);
   lines.push(``);
@@ -654,6 +892,104 @@ export function buildAgentPrompt(args: {
       lines.push(``);
     }
   }
+
+  // === Sections enrichies ===
+  if (inAppBrowsers && inAppBrowsers.totalSessionsWith418Fbclid > 0) {
+    const ib = inAppBrowsers;
+    lines.push(`## Environnements concernés (sessions avec #418 + fbclid)`);
+    lines.push(``);
+    lines.push(
+      `${ib.totalSessionsWith418Fbclid} sessions ont déclenché une erreur d'hydratation #418 sur une URL contenant \`fbclid\`. ` +
+        `Part identifiée comme **navigateur in-app social** (Facebook, Instagram, TikTok, LinkedIn…) : **${ib.inAppShare}%**.`,
+    );
+    lines.push(``);
+    if (ib.inAppShare > 50) {
+      lines.push(
+        `> 🎯 **Smoking gun probable** : la majorité des crashs viennent du WebView in-app (gestion JS dégradée, parfois pas de support de certaines APIs). C'est cohérent avec un trafic publicitaire Facebook qui ouvre le lien dans le navigateur intégré.`,
+      );
+      lines.push(``);
+    }
+    lines.push(`**Top navigateurs :**`);
+    lines.push(``);
+    lines.push(`| Navigateur | Sessions | % |`);
+    lines.push(`|---|---:|---:|`);
+    ib.topBrowsers.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+    lines.push(``);
+    lines.push(`**Top OS :**`);
+    lines.push(``);
+    lines.push(`| OS | Sessions | % |`);
+    lines.push(`|---|---:|---:|`);
+    ib.topOs.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+    lines.push(``);
+    if (ib.topDevices.length > 0) {
+      lines.push(`**Top devices :**`);
+      lines.push(``);
+      lines.push(`| Device | Sessions | % |`);
+      lines.push(`|---|---:|---:|`);
+      ib.topDevices.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+      lines.push(``);
+    }
+  }
+
+  if (bounceImpact) {
+    const bi = bounceImpact;
+    lines.push(`## Impact comportemental — taux de rebond stratifié`);
+    lines.push(``);
+    lines.push(
+      `Comparaison entre sessions saines (0 erreur), sessions en cascade d'erreurs (≥3) et sessions non-récupérées après un fallback CSR.`,
+    );
+    lines.push(``);
+    lines.push(`| Cohorte | Sessions | Bounce rate | Durée médiane (s) |`);
+    lines.push(`|---|---:|---:|---:|`);
+    lines.push(`| Sans erreur | ${bi.cleanSessions} | ${bi.cleanBounceRate}% | ${bi.cleanMedianDuration}s |`);
+    lines.push(`| Cascade d'erreurs (≥3) | ${bi.cascadeSessions} | ${bi.cascadeBounceRate}% | ${bi.cascadeMedianDuration}s |`);
+    lines.push(`| Non-récupérées après fallback | ${bi.nonRecoveredAfterFallback} | — | ${bi.nonRecoveredMedianDuration}s |`);
+    lines.push(``);
+    if (bi.cascadeBounceRate > bi.cleanBounceRate + 10) {
+      lines.push(
+        `> ⚠️ **Surbounce de ${bi.cascadeBounceRate - bi.cleanBounceRate} pts** sur les sessions en cascade — preuve directe que les erreurs d'hydratation font fuir les utilisateurs.`,
+      );
+      lines.push(``);
+    }
+    if (bi.nonRecoveredMedianDuration > 0 && bi.nonRecoveredMedianDuration < 10) {
+      lines.push(
+        `> 🚨 Les sessions non-récupérées partent en moins de ${bi.nonRecoveredMedianDuration}s — flash blanc + abandon immédiat.`,
+      );
+      lines.push(``);
+    }
+  }
+
+  if (suspenseTiming && suspenseTiming.some((s) => s.total > 0)) {
+    lines.push(`## Chronologie des erreurs Suspense (#421 / #423)`);
+    lines.push(``);
+    lines.push(
+      `Délai entre l'arrivée sur la page (premier event de session) et le déclenchement de l'erreur Suspense. ` +
+        `Un délai \`<500ms\` = erreur au rendu initial. \`≥500ms\` = probable interaction utilisateur précoce (clic avant fin d'hydratation).`,
+    );
+    lines.push(``);
+    lines.push(`| Code | Total | Immédiat (<500ms) | Tardif (≥500ms) | Inconnu | Médiane (ms) |`);
+    lines.push(`|---|---:|---:|---:|---:|---:|`);
+    suspenseTiming.forEach((s) => {
+      lines.push(
+        `| ${s.eventName} | ${s.total} | ${s.immediateCount} (${s.immediatePct}%) | ${s.delayedCount} | ${s.unknownCount} | ${s.medianDelayMs} |`,
+      );
+    });
+    lines.push(``);
+    suspenseTiming.forEach((s) => {
+      if (s.total === 0) return;
+      if (s.immediatePct > 70) {
+        lines.push(
+          `> \`${s.eventName}\` : **${s.immediatePct}% immédiat** → cause = rendu initial / mismatch SSR. Vérifier les Suspense boundaries qui wrappent du contenu dépendant des query params.`,
+        );
+      } else if (s.immediatePct < 30) {
+        lines.push(
+          `> \`${s.eventName}\` : **${100 - s.immediatePct}% tardif** → l'utilisateur clique avant la fin de l'hydratation. Désactiver les CTAs ou afficher un loader jusqu'à \`useEffect\` premier tour.`,
+        );
+      }
+    });
+    lines.push(``);
+  }
+
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(
