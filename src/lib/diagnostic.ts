@@ -452,7 +452,99 @@ export function generateHypotheses(args: {
     });
   }
 
+  // H7 : CSR fallback déclenché — impact UX visible
+  const csrFallback = errorBreakdown.find((e) => e.eventName === "csr-fallback-triggered");
+  const hydrationTotal = errorBreakdown
+    .filter((e) => e.eventName.startsWith("hydration-error"))
+    .reduce((acc, e) => acc + e.count, 0);
+  if (csrFallback && csrFallback.count > 0) {
+    const ratio = hydrationTotal > 0 ? Math.round((csrFallback.count / hydrationTotal) * 100) : 0;
+    hyp.push({
+      rank: hyp.length + 1,
+      confidence: csrFallback.count > 50 ? "high" : "medium",
+      title: `${csrFallback.count} CSR fallback déclenchés — impact UX visible (flash blanc, perte d'état)`,
+      evidence: [
+        `${csrFallback.count} fois React a abandonné l'hydratation et re-rendu côté client`,
+        hydrationTotal > 0
+          ? `Ratio fallback/hydration-error = ${ratio}% — ${ratio > 50 ? "la majorité" : "une partie"} des mismatchs aboutissent à un re-render complet visible par l'utilisateur`
+          : `Pas d'hydration-error associé — possible déclenchement direct via Suspense throw`,
+        `C'est le SYMPTÔME UX, pas la cause. Les utilisateurs voient un flash et perdent leur scroll/état local.`,
+      ],
+      fixSuggestions: [
+        "Ne pas chercher à supprimer le fallback : c'est React qui se protège.",
+        "Corriger les hydration-error en amont (cf. H1) → ces fallbacks disparaîtront automatiquement.",
+        "Ajouter un loader/skeleton pendant le re-render CSR pour masquer le flash si le fix prend du temps.",
+        "Vérifier dans Umami si les sessions qui déclenchent un fallback continuent à naviguer (= récupération) ou bouncent (= échec UX).",
+      ],
+    });
+  }
+
   return hyp;
+}
+
+export interface CsrFallbackImpact {
+  total: number;
+  uniqueSessions: number;
+  ratioToHydration: number;
+  topRoutes: { path: string; count: number }[];
+  queryParamCorrelation: { param: string; pctOfFallbacks: number }[];
+  recoveryRate: number; // % sessions avec event après le fallback
+}
+
+export function analyzeCsrFallback(
+  allEvents: UmamiEvent[],
+  hydrationTotal: number,
+): CsrFallbackImpact {
+  const fallbacks = allEvents.filter((e) => e.eventName === "csr-fallback-triggered");
+  const total = fallbacks.length;
+  const sessionIds = new Set<string>();
+  const routeMap = new Map<string, number>();
+  const paramMap = new Map<string, number>();
+  for (const f of fallbacks) {
+    if (f.sessionId) sessionIds.add(f.sessionId);
+    const path = f.urlPath || "/";
+    routeMap.set(path, (routeMap.get(path) ?? 0) + 1);
+    const params = parseQuery(f.urlQuery);
+    for (const k of Object.keys(params)) {
+      paramMap.set(k, (paramMap.get(k) ?? 0) + 1);
+    }
+  }
+  // Recovery : sessions où il existe au moins 1 event APRÈS le timestamp du dernier fallback
+  let recovered = 0;
+  for (const sid of sessionIds) {
+    const sessionEvents = allEvents.filter((e) => e.sessionId === sid);
+    const lastFallback = Math.max(
+      ...sessionEvents
+        .filter((e) => e.eventName === "csr-fallback-triggered")
+        .map((e) => new Date(e.createdAt).getTime()),
+    );
+    const hasAfter = sessionEvents.some(
+      (e) =>
+        e.eventName !== "csr-fallback-triggered" &&
+        new Date(e.createdAt).getTime() > lastFallback,
+    );
+    if (hasAfter) recovered += 1;
+  }
+  return {
+    total,
+    uniqueSessions: sessionIds.size,
+    ratioToHydration: hydrationTotal > 0 ? Math.round((total / hydrationTotal) * 100) : 0,
+    topRoutes: Array.from(routeMap.entries())
+      .map(([path, count]) => ({ path, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    queryParamCorrelation:
+      total > 0
+        ? Array.from(paramMap.entries())
+            .map(([param, count]) => ({
+              param,
+              pctOfFallbacks: Math.round((count / total) * 100),
+            }))
+            .sort((a, b) => b.pctOfFallbacks - a.pctOfFallbacks)
+            .slice(0, 8)
+        : [],
+    recoveryRate: sessionIds.size > 0 ? Math.round((recovered / sessionIds.size) * 100) : 0,
+  };
 }
 
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
