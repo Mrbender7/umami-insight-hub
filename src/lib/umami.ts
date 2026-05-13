@@ -80,9 +80,15 @@ let staticDataPromise: Promise<StaticUmamiData> | null = null;
 
 function getPeriodFromRange(range: Range): Period {
   const duration = range.endAt - range.startAt;
-  const day = 24 * 60 * 60 * 1000;
-  if (range.unit === "hour") return "24h";
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
   if (range.unit === "month") return "all";
+  if (range.unit === "hour") {
+    if (duration <= 1 * hour) return "1h";
+    if (duration <= 6 * hour) return "6h";
+    if (duration <= 12 * hour) return "12h";
+    return "24h";
+  }
   return duration <= 8 * day ? "7d" : "30d";
 }
 
@@ -101,7 +107,11 @@ async function loadStaticData(): Promise<StaticUmamiData> {
 
 export function getRange(period: Period): Range {
   const endAt = Date.now();
-  const day = 24 * 60 * 60 * 1000;
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+  if (period === "1h") return { startAt: endAt - hour, endAt, unit: "hour" };
+  if (period === "6h") return { startAt: endAt - 6 * hour, endAt, unit: "hour" };
+  if (period === "12h") return { startAt: endAt - 12 * hour, endAt, unit: "hour" };
   if (period === "24h") return { startAt: endAt - day, endAt, unit: "hour" };
   if (period === "7d") return { startAt: endAt - 7 * day, endAt, unit: "day" };
   if (period === "30d") return { startAt: endAt - 30 * day, endAt, unit: "day" };
