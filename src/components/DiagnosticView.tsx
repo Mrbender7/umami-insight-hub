@@ -316,6 +316,72 @@ export function DiagnosticView({ period }: { period: Period }) {
         </div>
       </section>
 
+      {/* CSR Fallback impact */}
+      {data.csrFallback.total > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+              <AlertTriangle className="size-4 text-warning" />
+              Impact UX — CSR fallback déclenché
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              React a abandonné l'hydratation et re-rendu côté client (flash visible). Indicateur d'impact, pas de cause.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/40">
+            <CsrStat label="Fallbacks" value={data.csrFallback.total.toLocaleString()} />
+            <CsrStat label="Sessions touchées" value={data.csrFallback.uniqueSessions.toLocaleString()} />
+            <CsrStat
+              label="Ratio / hydration"
+              value={`${data.csrFallback.ratioToHydration}%`}
+              hint={data.csrFallback.ratioToHydration > 50 ? "majorité des mismatchs" : "récupération React fréquente"}
+            />
+            <CsrStat
+              label="Taux récupération"
+              value={`${data.csrFallback.recoveryRate}%`}
+              hint={data.csrFallback.recoveryRate < 50 ? "⚠ users bouncent" : "users résilients"}
+              danger={data.csrFallback.recoveryRate < 50}
+            />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-px bg-border/40">
+            <div className="bg-card/20 p-5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Top routes affectées
+              </p>
+              {data.csrFallback.topRoutes.length === 0 ? (
+                <p className="text-xs text-muted-foreground">—</p>
+              ) : (
+                <ul className="space-y-1 text-xs">
+                  {data.csrFallback.topRoutes.slice(0, 6).map((r) => (
+                    <li key={r.path} className="flex justify-between gap-3">
+                      <code className="font-mono text-foreground/80 truncate">{r.path}</code>
+                      <span className="tabular-nums font-semibold">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="bg-card/20 p-5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Query params corrélés
+              </p>
+              {data.csrFallback.queryParamCorrelation.length === 0 ? (
+                <p className="text-xs text-muted-foreground">—</p>
+              ) : (
+                <ul className="space-y-1 text-xs">
+                  {data.csrFallback.queryParamCorrelation.slice(0, 6).map((p) => (
+                    <li key={p.param} className="flex justify-between gap-3">
+                      <code className="font-mono text-foreground/80">{p.param}</code>
+                      <span className="tabular-nums font-semibold">{p.pctOfFallbacks}%</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Query params */}
       <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
         <div className="px-5 py-4 border-b border-border/60 flex items-center gap-2">
