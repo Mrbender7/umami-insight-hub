@@ -380,14 +380,78 @@ export interface RealtimeData {
   timestamp?: number;
 }
 
+// L'API publique Umami n'expose PAS /realtime (uniquement utilisé par le dashboard interne).
+// On compose donc l'équivalent à partir des endpoints réels :
+//   - /active                       → nombre de visiteurs actifs (5 dernières minutes)
+//   - /events?startAt&endAt         → pages vues (eventType=1) + events (eventType=2)
+//   - /metrics?type=country|url|referrer
 export async function getRealtime(startAt?: number): Promise<RealtimeData> {
   if (USE_STATIC_DATA) {
     return { visitors: [], pageviews: [], events: [], countries: [], referrers: [], urls: [] };
   }
-  const start = startAt ?? Date.now() - 30 * 60 * 1000;
-  return umamiFetch<RealtimeData>(`/websites/${WEBSITE_ID}/realtime`, {
-    startAt: start,
-  });
+  const endAt = Date.now();
+  const start = startAt ?? endAt - 30 * 60 * 1000;
+  const range = { startAt: start, endAt };
+
+  const [activeRes, eventsRes, countries, urls, referrers] = await Promise.allSettled([
+    umamiFetch<{ visitors: number }>(`/websites/${WEBSITE_ID}/active`),
+    umamiFetch<PagedEvents>(`/websites/${WEBSITE_ID}/events`, {
+      ...range,
+      pageSize: 200,
+      orderBy: "createdAt",
+    }),
+    umamiFetch<RealtimeCountryItem[]>(`/websites/${WEBSITE_ID}/metrics`, {
+      ...range,
+      type: "country",
+      limit: 50,
+    }),
+    umamiFetch<{ x: string; y: number }[]>(`/websites/${WEBSITE_ID}/metrics`, {
+      ...range,
+      type: "url",
+      limit: 20,
+    }),
+    umamiFetch<{ x: string; y: number }[]>(`/websites/${WEBSITE_ID}/metrics`, {
+      ...range,
+      type: "referrer",
+      limit: 20,
+    }),
+  ]);
+
+  const visitors =
+    activeRes.status === "fulfilled" ? activeRes.value?.visitors ?? 0 : 0;
+  const allEvents =
+    eventsRes.status === "fulfilled" ? eventsRes.value?.data ?? [] : [];
+
+  // eventType: 1 = pageview, 2 = custom event (convention Umami)
+  const pageviews: RealtimePageview[] = allEvents
+    .filter((e) => e.eventType === 1)
+    .map((e) => ({
+      id: e.id,
+      sessionId: e.sessionId,
+      urlPath: e.urlPath,
+      urlQuery: e.urlQuery,
+      referrerDomain: e.referrerPath,
+      createdAt: e.createdAt,
+    }));
+  const events: RealtimeEventItem[] = allEvents
+    .filter((e) => e.eventType === 2)
+    .map((e) => ({
+      id: e.id,
+      sessionId: e.sessionId,
+      urlPath: e.urlPath,
+      eventName: e.eventName,
+      createdAt: e.createdAt,
+    }));
+
+  return {
+    visitors,
+    pageviews,
+    events,
+    countries: countries.status === "fulfilled" ? countries.value ?? [] : [],
+    urls: urls.status === "fulfilled" ? urls.value ?? [] : [],
+    referrers: referrers.status === "fulfilled" ? referrers.value ?? [] : [],
+    timestamp: endAt,
+  };
 }
 
 export async function getSessionActivity(
