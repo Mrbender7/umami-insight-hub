@@ -547,6 +547,210 @@ export function analyzeCsrFallback(
   };
 }
 
+// ===================== Enrichissements (analyses croisées) =====================
+
+export interface InAppBrowserStat {
+  totalSessionsWith418Fbclid: number;
+  topBrowsers: { name: string; count: number; pct: number }[];
+  topOs: { name: string; count: number; pct: number }[];
+  topDevices: { name: string; count: number; pct: number }[];
+  inAppShare: number; // % de sessions identifiées comme in-app browser (FB/IG/TikTok/LinkedIn)
+}
+
+const IN_APP_BROWSER_HINTS = [
+  "facebook",
+  "fban",
+  "fbav",
+  "instagram",
+  "tiktok",
+  "linkedin",
+  "snapchat",
+  "wechat",
+  "line",
+  "pinterest",
+];
+
+function isInAppBrowser(s: UmamiSession): boolean {
+  const hay = `${s.browser ?? ""} ${s.device ?? ""}`.toLowerCase();
+  return IN_APP_BROWSER_HINTS.some((h) => hay.includes(h));
+}
+
+export function analyzeInAppBrowsers(
+  allEvents: UmamiEvent[],
+  sessions: UmamiSession[],
+): InAppBrowserStat {
+  // Sessions ayant à la fois un event 418 ET un fbclid dans une URL d'erreur
+  const target = new Set<string>();
+  const sessionsWith418 = new Set<string>();
+  const sessionsWithFbclid = new Set<string>();
+  for (const e of allEvents) {
+    if (!e.sessionId) continue;
+    if (e.eventName === "hydration-error-418") sessionsWith418.add(e.sessionId);
+    const params = parseQuery(e.urlQuery);
+    if (params.fbclid) sessionsWithFbclid.add(e.sessionId);
+  }
+  for (const sid of sessionsWith418) {
+    if (sessionsWithFbclid.has(sid)) target.add(sid);
+  }
+  const matched = sessions.filter((s) => target.has(s.id));
+  const total = matched.length;
+  const tally = (key: keyof UmamiSession) => {
+    const map = new Map<string, number>();
+    for (const s of matched) {
+      const v = (s[key] as string | undefined) || "Inconnu";
+      map.set(v, (map.get(v) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  };
+  const inApp = matched.filter(isInAppBrowser).length;
+  return {
+    totalSessionsWith418Fbclid: total,
+    topBrowsers: tally("browser"),
+    topOs: tally("os"),
+    topDevices: tally("device"),
+    inAppShare: total > 0 ? Math.round((inApp / total) * 100) : 0,
+  };
+}
+
+export interface BounceImpactStat {
+  cleanSessions: number;
+  cleanBounceRate: number;
+  cleanMedianDuration: number; // secondes
+  cascadeSessions: number; // ≥3 events d'erreur
+  cascadeBounceRate: number;
+  cascadeMedianDuration: number;
+  nonRecoveredAfterFallback: number;
+  nonRecoveredMedianDuration: number;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+export function analyzeBounceImpact(
+  allEvents: UmamiEvent[],
+  sessions: UmamiSession[],
+): BounceImpactStat {
+  // Compte d'events d'erreur par session
+  const errorCountBySession = new Map<string, number>();
+  for (const e of allEvents) {
+    if (e.sessionId && ERROR_SET.has(e.eventName)) {
+      errorCountBySession.set(e.sessionId, (errorCountBySession.get(e.sessionId) ?? 0) + 1);
+    }
+  }
+  // Sessions non-récupérées après un fallback (aucun event après le dernier fallback)
+  const nonRecovered = new Set<string>();
+  const fallbackSessions = new Set<string>();
+  for (const e of allEvents) {
+    if (e.sessionId && e.eventName === "csr-fallback-triggered") fallbackSessions.add(e.sessionId);
+  }
+  for (const sid of fallbackSessions) {
+    const ev = allEvents.filter((e) => e.sessionId === sid);
+    const lastFb = Math.max(
+      ...ev.filter((e) => e.eventName === "csr-fallback-triggered").map((e) => new Date(e.createdAt).getTime()),
+    );
+    const after = ev.some(
+      (e) => e.eventName !== "csr-fallback-triggered" && new Date(e.createdAt).getTime() > lastFb,
+    );
+    if (!after) nonRecovered.add(sid);
+  }
+
+  const clean: UmamiSession[] = [];
+  const cascade: UmamiSession[] = [];
+  const nonReco: UmamiSession[] = [];
+  for (const s of sessions) {
+    const ec = errorCountBySession.get(s.id) ?? 0;
+    if (ec === 0) clean.push(s);
+    else if (ec >= 3) cascade.push(s);
+    if (nonRecovered.has(s.id)) nonReco.push(s);
+  }
+  const bounceRate = (group: UmamiSession[]) => {
+    if (group.length === 0) return 0;
+    const bounced = group.filter((s) => (s.views ?? 0) <= 1).length;
+    return Math.round((bounced / group.length) * 100);
+  };
+  const medDur = (group: UmamiSession[]) =>
+    median(group.map((s) => s.totaltime ?? 0).filter((v) => v >= 0));
+
+  return {
+    cleanSessions: clean.length,
+    cleanBounceRate: bounceRate(clean),
+    cleanMedianDuration: medDur(clean),
+    cascadeSessions: cascade.length,
+    cascadeBounceRate: bounceRate(cascade),
+    cascadeMedianDuration: medDur(cascade),
+    nonRecoveredAfterFallback: nonReco.length,
+    nonRecoveredMedianDuration: medDur(nonReco),
+  };
+}
+
+export interface SuspenseTimingStat {
+  eventName: "hydration-error-421" | "hydration-error-423";
+  total: number;
+  immediateCount: number; // <500ms après l'arrivée sur la page
+  delayedCount: number; // ≥500ms (probable interaction utilisateur)
+  unknownCount: number; // pas de pageview de référence
+  medianDelayMs: number;
+  immediatePct: number;
+}
+
+export function analyzeSuspenseTiming(allEvents: UmamiEvent[]): SuspenseTimingStat[] {
+  const targets: Array<SuspenseTimingStat["eventName"]> = [
+    "hydration-error-421",
+    "hydration-error-423",
+  ];
+  // Indexe les events par session
+  const bySession = new Map<string, UmamiEvent[]>();
+  for (const e of allEvents) {
+    if (!e.sessionId) continue;
+    (bySession.get(e.sessionId) ?? bySession.set(e.sessionId, []).get(e.sessionId)!).push(e);
+  }
+  for (const list of bySession.values()) {
+    list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+  return targets.map((name) => {
+    const delays: number[] = [];
+    let immediate = 0;
+    let delayed = 0;
+    let unknown = 0;
+    let total = 0;
+    for (const list of bySession.values()) {
+      // référence : premier event de la session (souvent pageview en eventType=1)
+      const ref = list[0];
+      if (!ref) continue;
+      const refT = new Date(ref.createdAt).getTime();
+      for (const e of list) {
+        if (e.eventName !== name) continue;
+        total += 1;
+        const t = new Date(e.createdAt).getTime();
+        const delta = t - refT;
+        if (Number.isNaN(delta) || delta < 0) {
+          unknown += 1;
+          continue;
+        }
+        delays.push(delta);
+        if (delta < 500) immediate += 1;
+        else delayed += 1;
+      }
+    }
+    return {
+      eventName: name,
+      total,
+      immediateCount: immediate,
+      delayedCount: delayed,
+      unknownCount: unknown,
+      medianDelayMs: median(delays),
+      immediatePct: total > 0 ? Math.round((immediate / total) * 100) : 0,
+    };
+  });
+}
+
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
   const set = new Set<string>();
   for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
