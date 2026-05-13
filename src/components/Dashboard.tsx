@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
-  BarChart3, Brain, Globe2, Users,
+  BarChart3, Brain, Globe2, Users, Radio,
 } from "lucide-react";
 import { DiagnosticView } from "./DiagnosticView";
 import { CountriesView } from "./CountriesView";
 import { UsersView } from "./UsersView";
+import { RealtimeView } from "./RealtimeView";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
