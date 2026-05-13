@@ -129,6 +129,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {view === "realtime" && <RealtimeView />}
         {view === "diagnostic" && <DiagnosticView period={period} />}
         {view === "countries" && <CountriesView period={period} />}
         {view === "users" && <UsersView period={period} />}
