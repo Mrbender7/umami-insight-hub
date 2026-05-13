@@ -141,7 +141,7 @@ export function DiagnosticView({ period }: { period: Period }) {
     }
   }
 
-  const isLoading = counts.isLoading || events.isLoading || series.isLoading;
+  const isLoading = counts.isLoading || events.isLoading || series.isLoading || sessionsQ.isLoading;
   const peakHour = data.hourly.reduce(
     (m, b) => (b.total > m.total ? b : m),
     data.hourly[0] ?? { hour: 0, total: 0, byType: {} },
