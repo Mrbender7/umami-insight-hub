@@ -15,6 +15,7 @@ import {
   getEventCounts,
   getEventSeries,
   getRecentEvents,
+  getSessions,
   getRange,
   type Period,
 } from "@/lib/umami";
@@ -29,6 +30,9 @@ import {
   buildAgentPrompt,
   countUniqueErrorSessions,
   analyzeCsrFallback,
+  analyzeInAppBrowsers,
+  analyzeBounceImpact,
+  analyzeSuspenseTiming,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
