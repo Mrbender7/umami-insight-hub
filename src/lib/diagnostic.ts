@@ -346,7 +346,7 @@ export function generateHypotheses(args: {
       fixSuggestions: [
         "Chercher dans le code : useSearchParams, window.location.search, URLSearchParams au render initial",
         "Si trouvé : wrapper le composant dans useEffect ou utiliser un dynamic import { ssr: false }",
-        "Alternative rapide : nettoyer l'URL côté serveur via un middleware (rediriger sans le param de tracking) ou via un useEffect qui fait history.replaceState",
+        "GitHub Pages = pas de middleware serveur possible. Le seul nettoyage d'URL faisable est CÔTÉ CLIENT via un useEffect qui appelle history.replaceState pour stripper fbclid/utm_* après l'hydratation.",
         "Tester en local : ouvrir https://radiosphere.be/?fbclid=test123 doit reproduire l'erreur",
       ],
     });
