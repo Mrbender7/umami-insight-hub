@@ -766,3 +766,31 @@ function CsrStat({
     </div>
   );
 }
+
+function RankList({
+  title,
+  items,
+}: {
+  title: string;
+  items: { name: string; count: number; pct: number }[];
+}) {
+  return (
+    <div className="bg-card/20 p-5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">—</p>
+      ) : (
+        <ul className="space-y-1 text-xs">
+          {items.slice(0, 6).map((it) => (
+            <li key={it.name} className="flex justify-between gap-3">
+              <span className="text-foreground/80 truncate">{it.name}</span>
+              <span className="tabular-nums font-semibold">
+                {it.count} <span className="text-muted-foreground">({it.pct}%)</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
