@@ -61,9 +61,14 @@ export function DiagnosticView({ period }: { period: Period }) {
     queryKey: ["umami-series", period],
     queryFn: () => getEventSeries(range),
   });
+  const sessionsQ = useQuery({
+    queryKey: ["umami-sessions", period],
+    queryFn: () => getSessions(range),
+  });
 
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
+    const allSessions = sessionsQ.data?.data ?? [];
     const errorEvents = filterErrorEvents(allEvents);
     const queryParams = analyzeQueryParams(errorEvents);
     const routes = analyzeRoutes(errorEvents);
@@ -79,6 +84,9 @@ export function DiagnosticView({ period }: { period: Period }) {
       .filter((e) => e.eventName.startsWith("hydration-error"))
       .reduce((acc, e) => acc + e.count, 0);
     const csrFallback = analyzeCsrFallback(allEvents, hydrationTotal);
+    const inAppBrowsers = analyzeInAppBrowsers(allEvents, allSessions);
+    const bounceImpact = analyzeBounceImpact(allEvents, allSessions);
+    const suspenseTiming = analyzeSuspenseTiming(allEvents);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -100,8 +108,11 @@ export function DiagnosticView({ period }: { period: Period }) {
       adLanding,
       hypotheses,
       csrFallback,
+      inAppBrowsers,
+      bounceImpact,
+      suspenseTiming,
     };
-  }, [events.data, counts.data]);
+  }, [events.data, counts.data, sessionsQ.data]);
 
   const agentPrompt = useMemo(
     () =>
@@ -111,6 +122,9 @@ export function DiagnosticView({ period }: { period: Period }) {
         topRoutes: data.routes,
         topQueryParams: data.queryParams,
         csrFallback: data.csrFallback,
+        inAppBrowsers: data.inAppBrowsers,
+        bounceImpact: data.bounceImpact,
+        suspenseTiming: data.suspenseTiming,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
