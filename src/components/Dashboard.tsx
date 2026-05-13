@@ -78,6 +78,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
               {([
                 { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
+                { id: "realtime", label: "Temps réel", icon: Radio },
                 { id: "diagnostic", label: "Diagnostic", icon: Brain },
                 { id: "countries", label: "Pays", icon: Globe2 },
                 { id: "users", label: "Utilisateurs", icon: Users },
