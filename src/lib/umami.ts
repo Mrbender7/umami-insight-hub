@@ -53,7 +53,7 @@ export const ERROR_EVENTS = [
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
 export type EventName = (typeof ALL_EVENTS)[number];
 
-export type Period = "24h" | "7d" | "30d" | "all";
+export type Period = "1h" | "6h" | "12h" | "24h" | "7d" | "30d" | "all";
 
 export interface Range {
   startAt: number;
