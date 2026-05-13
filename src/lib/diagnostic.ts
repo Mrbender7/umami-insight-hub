@@ -618,6 +618,42 @@ export function buildAgentPrompt(args: {
     lines.push(`| \`${p.param}\` | ${p.percentOfErrors}% | ${p.occurrences} | ${p.uniqueValues} |`);
   });
   lines.push(``);
+  if (csrFallback && csrFallback.total > 0) {
+    lines.push(`## Impact UX — CSR fallback déclenché`);
+    lines.push(``);
+    lines.push(
+      `Quand React n'arrive pas à hydrater, il abandonne le HTML serveur et re-rend tout côté client. ` +
+        `C'est visible par l'utilisateur (flash blanc, perte de scroll/état). Indicateur d'IMPACT, pas de cause.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total fallbacks** : ${csrFallback.total}`);
+    lines.push(`- **Sessions uniques touchées** : ${csrFallback.uniqueSessions}`);
+    lines.push(
+      `- **Ratio fallback / hydration-error** : ${csrFallback.ratioToHydration}% ${csrFallback.ratioToHydration > 50 ? "→ la majorité des mismatchs cassent l'UX" : "→ React récupère souvent sans re-render complet"}`,
+    );
+    lines.push(
+      `- **Taux de récupération** : ${csrFallback.recoveryRate}% des sessions continuent à naviguer après le fallback ${csrFallback.recoveryRate < 50 ? "→ ALERTE : la moitié bouncent" : "→ utilisateurs résilients"}`,
+    );
+    lines.push(``);
+    if (csrFallback.topRoutes.length > 0) {
+      lines.push(`**Routes les plus touchées :**`);
+      lines.push(``);
+      lines.push(`| Route | Fallbacks |`);
+      lines.push(`|---|---:|`);
+      csrFallback.topRoutes.forEach((r) => lines.push(`| \`${r.path}\` | ${r.count} |`));
+      lines.push(``);
+    }
+    if (csrFallback.queryParamCorrelation.length > 0) {
+      lines.push(`**Query params corrélés aux fallbacks :**`);
+      lines.push(``);
+      lines.push(`| Param | % des fallbacks |`);
+      lines.push(`|---|---:|`);
+      csrFallback.queryParamCorrelation.forEach((p) =>
+        lines.push(`| \`${p.param}\` | ${p.pctOfFallbacks}% |`),
+      );
+      lines.push(``);
+    }
+  }
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(
