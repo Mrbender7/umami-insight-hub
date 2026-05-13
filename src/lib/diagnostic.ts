@@ -892,6 +892,104 @@ export function buildAgentPrompt(args: {
       lines.push(``);
     }
   }
+
+  // === Sections enrichies ===
+  if (inAppBrowsers && inAppBrowsers.totalSessionsWith418Fbclid > 0) {
+    const ib = inAppBrowsers;
+    lines.push(`## Environnements concernés (sessions avec #418 + fbclid)`);
+    lines.push(``);
+    lines.push(
+      `${ib.totalSessionsWith418Fbclid} sessions ont déclenché une erreur d'hydratation #418 sur une URL contenant \`fbclid\`. ` +
+        `Part identifiée comme **navigateur in-app social** (Facebook, Instagram, TikTok, LinkedIn…) : **${ib.inAppShare}%**.`,
+    );
+    lines.push(``);
+    if (ib.inAppShare > 50) {
+      lines.push(
+        `> 🎯 **Smoking gun probable** : la majorité des crashs viennent du WebView in-app (gestion JS dégradée, parfois pas de support de certaines APIs). C'est cohérent avec un trafic publicitaire Facebook qui ouvre le lien dans le navigateur intégré.`,
+      );
+      lines.push(``);
+    }
+    lines.push(`**Top navigateurs :**`);
+    lines.push(``);
+    lines.push(`| Navigateur | Sessions | % |`);
+    lines.push(`|---|---:|---:|`);
+    ib.topBrowsers.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+    lines.push(``);
+    lines.push(`**Top OS :**`);
+    lines.push(``);
+    lines.push(`| OS | Sessions | % |`);
+    lines.push(`|---|---:|---:|`);
+    ib.topOs.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+    lines.push(``);
+    if (ib.topDevices.length > 0) {
+      lines.push(`**Top devices :**`);
+      lines.push(``);
+      lines.push(`| Device | Sessions | % |`);
+      lines.push(`|---|---:|---:|`);
+      ib.topDevices.forEach((b) => lines.push(`| ${b.name} | ${b.count} | ${b.pct}% |`));
+      lines.push(``);
+    }
+  }
+
+  if (bounceImpact) {
+    const bi = bounceImpact;
+    lines.push(`## Impact comportemental — taux de rebond stratifié`);
+    lines.push(``);
+    lines.push(
+      `Comparaison entre sessions saines (0 erreur), sessions en cascade d'erreurs (≥3) et sessions non-récupérées après un fallback CSR.`,
+    );
+    lines.push(``);
+    lines.push(`| Cohorte | Sessions | Bounce rate | Durée médiane (s) |`);
+    lines.push(`|---|---:|---:|---:|`);
+    lines.push(`| Sans erreur | ${bi.cleanSessions} | ${bi.cleanBounceRate}% | ${bi.cleanMedianDuration}s |`);
+    lines.push(`| Cascade d'erreurs (≥3) | ${bi.cascadeSessions} | ${bi.cascadeBounceRate}% | ${bi.cascadeMedianDuration}s |`);
+    lines.push(`| Non-récupérées après fallback | ${bi.nonRecoveredAfterFallback} | — | ${bi.nonRecoveredMedianDuration}s |`);
+    lines.push(``);
+    if (bi.cascadeBounceRate > bi.cleanBounceRate + 10) {
+      lines.push(
+        `> ⚠️ **Surbounce de ${bi.cascadeBounceRate - bi.cleanBounceRate} pts** sur les sessions en cascade — preuve directe que les erreurs d'hydratation font fuir les utilisateurs.`,
+      );
+      lines.push(``);
+    }
+    if (bi.nonRecoveredMedianDuration > 0 && bi.nonRecoveredMedianDuration < 10) {
+      lines.push(
+        `> 🚨 Les sessions non-récupérées partent en moins de ${bi.nonRecoveredMedianDuration}s — flash blanc + abandon immédiat.`,
+      );
+      lines.push(``);
+    }
+  }
+
+  if (suspenseTiming && suspenseTiming.some((s) => s.total > 0)) {
+    lines.push(`## Chronologie des erreurs Suspense (#421 / #423)`);
+    lines.push(``);
+    lines.push(
+      `Délai entre l'arrivée sur la page (premier event de session) et le déclenchement de l'erreur Suspense. ` +
+        `Un délai \`<500ms\` = erreur au rendu initial. \`≥500ms\` = probable interaction utilisateur précoce (clic avant fin d'hydratation).`,
+    );
+    lines.push(``);
+    lines.push(`| Code | Total | Immédiat (<500ms) | Tardif (≥500ms) | Inconnu | Médiane (ms) |`);
+    lines.push(`|---|---:|---:|---:|---:|---:|`);
+    suspenseTiming.forEach((s) => {
+      lines.push(
+        `| ${s.eventName} | ${s.total} | ${s.immediateCount} (${s.immediatePct}%) | ${s.delayedCount} | ${s.unknownCount} | ${s.medianDelayMs} |`,
+      );
+    });
+    lines.push(``);
+    suspenseTiming.forEach((s) => {
+      if (s.total === 0) return;
+      if (s.immediatePct > 70) {
+        lines.push(
+          `> \`${s.eventName}\` : **${s.immediatePct}% immédiat** → cause = rendu initial / mismatch SSR. Vérifier les Suspense boundaries qui wrappent du contenu dépendant des query params.`,
+        );
+      } else if (s.immediatePct < 30) {
+        lines.push(
+          `> \`${s.eventName}\` : **${100 - s.immediatePct}% tardif** → l'utilisateur clique avant la fin de l'hydratation. Désactiver les CTAs ou afficher un loader jusqu'à \`useEffect\` premier tour.`,
+        );
+      }
+    });
+    lines.push(``);
+  }
+
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(
