@@ -62,20 +62,43 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 backdrop-blur-xl bg-background/70 border-b border-border/60">
-        <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-xl bg-gradient-neon flex items-center justify-center shadow-glow">
-              <Sparkles className="size-4 text-primary-foreground" />
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="size-9 rounded-xl bg-gradient-neon flex items-center justify-center shadow-glow shrink-0">
+                <Sparkles className="size-4 text-primary-foreground" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold tracking-tight truncate">
+                  <span className="text-gradient-neon">Stats</span> Umami
+                </h1>
+                <p className="text-xs text-muted-foreground hidden sm:block">Tableau de bord analytique</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base font-semibold tracking-tight">
-                <span className="text-gradient-neon">Stats</span> Umami
-              </h1>
-              <p className="text-xs text-muted-foreground">Tableau de bord analytique</p>
+            {/* Mobile-only actions on the right of the title row */}
+            <div className="flex items-center gap-2 lg:hidden print:hidden">
+              <PeriodSelector value={period} onChange={setPeriod} />
+              <button
+                onClick={refresh}
+                className="inline-flex items-center justify-center rounded-lg bg-card p-2 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                disabled={isLoading}
+                title="Rafraîchir"
+                aria-label="Rafraîchir"
+              >
+                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
+              </button>
+              <button
+                onClick={() => { logout(); onLogout(); }}
+                className="inline-flex items-center justify-center rounded-lg bg-card p-2 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
+              >
+                <LogOut className="size-3.5" />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2 print:hidden">
-            <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border">
+          <div className="flex items-center gap-2 print:hidden -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 overflow-x-auto lg:overflow-visible">
+            <div className="inline-flex rounded-lg bg-card p-1 ring-1 ring-border shrink-0">
               {([
                 { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
                 { id: "realtime", label: "Temps réel", icon: Radio },
@@ -90,7 +113,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     key={tab.id}
                     onClick={() => setView(tab.id)}
                     className={
-                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition " +
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition whitespace-nowrap " +
                       (active
                         ? "bg-gradient-neon text-primary-foreground shadow-glow"
                         : "text-muted-foreground hover:text-foreground")
@@ -102,22 +125,25 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 );
               })}
             </div>
-            <PeriodSelector value={period} onChange={setPeriod} />
-            <button
-              onClick={refresh}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-              disabled={isLoading}
-            >
-              <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
-              Rafraîchir
-            </button>
-            <button
-              onClick={() => { logout(); onLogout(); }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-              title="Se déconnecter"
-            >
-              <LogOut className="size-3.5" />
-            </button>
+            {/* Desktop-only actions next to tabs */}
+            <div className="hidden lg:flex items-center gap-2">
+              <PeriodSelector value={period} onChange={setPeriod} />
+              <button
+                onClick={refresh}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                disabled={isLoading}
+              >
+                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
+                Rafraîchir
+              </button>
+              <button
+                onClick={() => { logout(); onLogout(); }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                title="Se déconnecter"
+              >
+                <LogOut className="size-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
