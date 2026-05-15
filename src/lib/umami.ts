@@ -233,23 +233,26 @@ async function umamiFetch<T>(
     Authorization: `Bearer ${API_TOKEN}`,
     Accept: "application/json",
   };
+  const fail = (detail: string): never =>
+    markLiveFailure(`Mode live indisponible : ${detail}. Retour aux données statiques.`);
 
   // 1) Tentative directe (rapide). Si on sait déjà que ça échoue, on saute.
   if (_directWorks !== false) {
     try {
-      const res = await fetchWithTimeout(directUrl, { headers }, 15000);
+      const res = await fetchWithTimeout(directUrl, { headers }, 8000);
       if (res.ok) {
         _directWorks = true;
+        setLastLiveError(null);
         return (await res.json()) as T;
       }
       // 4xx/5xx authentique de l'API : on remonte l'erreur sans tenter le proxy.
       if (_directWorks === true || (res.status >= 400 && res.status < 600 && res.status !== 0)) {
         const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}.`);
+        fail(`API Umami HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`);
       }
     } catch (err) {
       // Erreur réseau / CORS / timeout → on bascule sur le proxy.
-      if (_directWorks === true) throw err;
+      if (_directWorks === true || !CORS_PROXY) fail(`appel direct échoué (${abortMessage(err)})`);
       _directWorks = false;
     }
   }
@@ -258,18 +261,15 @@ async function umamiFetch<T>(
   const proxiedUrl = buildProxiedUrl(directUrl);
   let res: Response;
   try {
-    res = await fetchWithTimeout(proxiedUrl, { headers }, 30000);
+    res = await fetchWithTimeout(proxiedUrl, { headers }, 12000);
   } catch (error) {
-    throw new Error(
-      `Fetch error: ${(error as Error).message}. Direct + proxy ont échoué. URL cible : ${directUrl}`,
-    );
+    fail(`direct + proxy ont échoué (${abortMessage(error)})`);
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
-      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL via proxy : ${proxiedUrl}`,
-    );
+    fail(`proxy HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`);
   }
+  setLastLiveError(null);
   return res.json() as Promise<T>;
 }
 
