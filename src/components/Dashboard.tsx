@@ -66,12 +66,6 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
   }, [dataMode]);
 
-  function refresh() {
-    counts.refetch();
-    series.refetch();
-    events.refetch();
-  }
-
   async function recalcLive() {
     if (!liveAvailable) return;
     setDataMode("live");
@@ -86,7 +80,6 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     setLastLiveRefreshAt(null);
   }
 
-  const isLoading = counts.isLoading || series.isLoading || events.isLoading;
   const error = counts.error || series.error || events.error;
   const isLiveRefreshing = dataMode === "live" && fetchingCount > 0;
 
