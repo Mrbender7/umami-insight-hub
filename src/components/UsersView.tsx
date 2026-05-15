@@ -116,39 +116,70 @@ function SessionRow({ session, range }: { session: UmamiSession; range: ReturnTy
             {activityQ.data && activityQ.data.length === 0 && (
               <p className="text-xs text-muted-foreground">Aucune activité enregistrée.</p>
             )}
-            {activityQ.data && activityQ.data.length > 0 && (
-              <ol className="space-y-1 text-xs">
-                {activityQ.data.slice(0, 50).map((a, i) => (
-                  <li key={i} className="flex items-center gap-2 font-mono">
-                    <span className="text-muted-foreground tabular-nums">
-                      {new Date(a.createdAt).toLocaleTimeString("fr-BE", {
-                        hour: "2-digit", minute: "2-digit", second: "2-digit",
-                      })}
-                    </span>
-                    {a.eventName ? (
-                      <span className="px-1.5 py-0.5 rounded bg-gradient-neon-soft ring-1 ring-border text-[10px]">
-                        ⚡ {a.eventName}
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded bg-muted ring-1 ring-border text-[10px]">
-                        📄 page
-                      </span>
+            {activityQ.data && activityQ.data.length > 0 && (() => {
+              const acts = activityQ.data;
+              const events = acts.filter((a) => a.eventName);
+              const pages = acts.filter((a) => !a.eventName);
+              const eventCounts = new Map<string, number>();
+              for (const e of events) {
+                eventCounts.set(e.eventName!, (eventCounts.get(e.eventName!) ?? 0) + 1);
+              }
+              const topEvents = Array.from(eventCounts.entries()).sort((a, b) => b[1] - a[1]);
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-medium">{events.length}</span>
+                    <span className="text-muted-foreground">event{events.length > 1 ? "s" : ""}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="font-medium">{pages.length}</span>
+                    <span className="text-muted-foreground">page{pages.length > 1 ? "s" : ""} vue{pages.length > 1 ? "s" : ""}</span>
+                  </div>
+                  {topEvents.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {topEvents.map(([name, count]) => (
+                        <span
+                          key={name}
+                          className="px-2 py-0.5 rounded-md bg-gradient-neon-soft ring-1 ring-border text-[10px] font-mono"
+                        >
+                          ⚡ {name} <span className="text-muted-foreground">×{count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <ol className="space-y-1 text-xs border-t border-border/40 pt-2">
+                    {acts.slice(0, 50).map((a, i) => (
+                      <li key={i} className="flex items-center gap-2 font-mono">
+                        <span className="text-muted-foreground tabular-nums">
+                          {new Date(a.createdAt).toLocaleTimeString("fr-BE", {
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                          })}
+                        </span>
+                        {a.eventName ? (
+                          <span className="px-1.5 py-0.5 rounded bg-gradient-neon-soft ring-1 ring-border text-[10px]">
+                            ⚡ {a.eventName}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-muted ring-1 ring-border text-[10px]">
+                            📄 page
+                          </span>
+                        )}
+                        <span className="text-foreground/80">{a.urlPath}</span>
+                        {a.urlQuery && (
+                          <span className="text-muted-foreground truncate max-w-md">
+                            ?{decodeURIComponent(a.urlQuery)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                    {acts.length > 50 && (
+                      <li className="text-muted-foreground italic">
+                        … et {acts.length - 50} actions de plus
+                      </li>
                     )}
-                    <span className="text-foreground/80">{a.urlPath}</span>
-                    {a.urlQuery && (
-                      <span className="text-muted-foreground truncate max-w-md">
-                        ?{decodeURIComponent(a.urlQuery)}
-                      </span>
-                    )}
-                  </li>
-                ))}
-                {activityQ.data.length > 50 && (
-                  <li className="text-muted-foreground italic">
-                    … et {activityQ.data.length - 50} actions de plus
-                  </li>
-                )}
-              </ol>
-            )}
+                  </ol>
+                </div>
+              );
+            })()}
           </td>
         </tr>
       )}

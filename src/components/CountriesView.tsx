@@ -1,6 +1,16 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Globe2 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+} from "recharts";
 import { getCountries, getSessions, getRange, type Period } from "@/lib/umami";
 
 // Codes ISO → noms français (top pays attendus)
@@ -85,6 +95,8 @@ export function CountriesView({ period }: { period: Period }) {
         <h2 className="text-lg font-semibold tracking-tight">Pays — visites & engagement</h2>
       </div>
 
+      <CountriesBarChart rows={rows.slice(0, 10)} period={period} />
+
       <div className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -146,6 +158,86 @@ export function CountriesView({ period }: { period: Period }) {
         Les temps moyens sont calculés depuis les sessions individuelles d'Umami. Les pays sans
         session récente n'ont pas de durée.
       </p>
+    </div>
+  );
+}
+
+const PERIOD_LABELS: Record<Period, string> = {
+  "1h": "dernière heure",
+  "6h": "6 dernières heures",
+  "12h": "12 dernières heures",
+  "24h": "24 dernières heures",
+  "7d": "7 derniers jours",
+  "30d": "30 derniers jours",
+  "all": "toute la période",
+};
+
+const BAR_COLORS = [
+  "oklch(0.72 0.22 245)",
+  "oklch(0.65 0.27 305)",
+  "oklch(0.7 0.2 160)",
+  "oklch(0.75 0.18 80)",
+  "oklch(0.68 0.24 25)",
+  "oklch(0.62 0.2 200)",
+  "oklch(0.7 0.22 340)",
+  "oklch(0.68 0.18 130)",
+  "oklch(0.72 0.2 60)",
+  "oklch(0.6 0.22 280)",
+];
+
+function CountriesBarChart({
+  rows,
+  period,
+}: {
+  rows: { code: string; visits: number }[];
+  period: Period;
+}) {
+  const data = rows.map((r) => ({
+    name: COUNTRY_NAMES[r.code] ?? r.code,
+    code: r.code,
+    visits: r.visits,
+  }));
+
+  return (
+    <div className="rounded-2xl bg-gradient-card p-5 border-neon shadow-neon">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Top 10 pays — visites</h2>
+          <p className="text-xs text-muted-foreground">
+            {PERIOD_LABELS[period]} · mise à jour automatique
+          </p>
+        </div>
+      </div>
+      <div className="h-72 w-full">
+        {data.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+            Aucune donnée sur la période.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
+              <CartesianGrid stroke="oklch(0.3 0.02 270 / 30%)" horizontal={false} />
+              <XAxis type="number" stroke="oklch(0.68 0.02 270)" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" stroke="oklch(0.68 0.02 270)" fontSize={11} tickLine={false} axisLine={false} width={110} />
+              <Tooltip
+                contentStyle={{
+                  background: "oklch(0.20 0.018 270)",
+                  border: "1px solid oklch(0.3 0.02 270 / 60%)",
+                  borderRadius: 12,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "oklch(0.97 0.005 270)" }}
+                formatter={(v: number) => [v.toLocaleString(), "visites"]}
+              />
+              <Bar dataKey="visits" radius={[0, 6, 6, 0]}>
+                {data.map((_, i) => (
+                  <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
     </div>
   );
 }
