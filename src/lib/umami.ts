@@ -159,7 +159,8 @@ export async function getStaticGeneratedAt(): Promise<string | null> {
   } catch {
     return null;
   }
-}
+
+export function getRange(period: Period): Range {
   const endAt = Date.now();
   const hour = 60 * 60 * 1000;
   const day = 24 * hour;
