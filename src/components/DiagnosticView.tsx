@@ -72,6 +72,22 @@ export function DiagnosticView({ period }: { period: Period }) {
     queryFn: () => getSessions(range),
   });
 
+  // Event-data des 5 nouveaux events instrumentés (chargés en parallèle, vide en mode statique si non générés).
+  const evd = (eventName: string, fieldName: string) =>
+    useQuery({
+      queryKey: ["umami-evd", period, eventName, fieldName],
+      queryFn: () => getEventDataValues(range, eventName, fieldName),
+    });
+  const hmComponent = evd("hydration-mismatch-detail", "component");
+  const hmStack = evd("hydration-mismatch-detail", "componentStack");
+  const hmDigest = evd("hydration-mismatch-detail", "digest");
+  const hmMessage = evd("hydration-mismatch-detail", "message");
+  const csrMs = evd("csr-fallback-duration", "ms");
+  const wvApp = evd("webview-detected", "app");
+  const urlRemoved = evd("url-cleaned", "removed");
+  const ttfb = evd("pageview-perf", "ttfb");
+  const fcp = evd("pageview-perf", "fcp");
+
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
     const allSessions = sessionsQ.data?.data ?? [];
@@ -93,6 +109,16 @@ export function DiagnosticView({ period }: { period: Period }) {
     const inAppBrowsers = analyzeInAppBrowsers(allEvents, allSessions);
     const bounceImpact = analyzeBounceImpact(allEvents, allSessions);
     const suspenseTiming = analyzeSuspenseTiming(allEvents);
+    const hydrationDetails = analyzeHydrationDetails(
+      hmComponent.data ?? [],
+      hmStack.data ?? [],
+      hmDigest.data ?? [],
+      hmMessage.data ?? [],
+    );
+    const csrDuration = analyzeCsrDuration(csrMs.data ?? []);
+    const webViews = analyzeWebViews(wvApp.data ?? []);
+    const urlCleaned = analyzeUrlCleaned(urlRemoved.data ?? []);
+    const pageviewPerf = analyzePageviewPerf(ttfb.data ?? [], fcp.data ?? []);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -117,8 +143,26 @@ export function DiagnosticView({ period }: { period: Period }) {
       inAppBrowsers,
       bounceImpact,
       suspenseTiming,
+      hydrationDetails,
+      csrDuration,
+      webViews,
+      urlCleaned,
+      pageviewPerf,
     };
-  }, [events.data, counts.data, sessionsQ.data]);
+  }, [
+    events.data,
+    counts.data,
+    sessionsQ.data,
+    hmComponent.data,
+    hmStack.data,
+    hmDigest.data,
+    hmMessage.data,
+    csrMs.data,
+    wvApp.data,
+    urlRemoved.data,
+    ttfb.data,
+    fcp.data,
+  ]);
 
   const agentPrompt = useMemo(
     () =>
@@ -131,6 +175,11 @@ export function DiagnosticView({ period }: { period: Period }) {
         inAppBrowsers: data.inAppBrowsers,
         bounceImpact: data.bounceImpact,
         suspenseTiming: data.suspenseTiming,
+        hydrationDetails: data.hydrationDetails,
+        csrDuration: data.csrDuration,
+        webViews: data.webViews,
+        urlCleaned: data.urlCleaned,
+        pageviewPerf: data.pageviewPerf,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
