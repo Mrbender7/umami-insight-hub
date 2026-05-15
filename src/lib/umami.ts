@@ -259,12 +259,13 @@ async function umamiFetch<T>(
 
   // 2) Fallback proxy CORS.
   const proxiedUrl = buildProxiedUrl(directUrl);
-  let res: Response;
+  let res: Response | null = null;
   try {
     res = await fetchWithTimeout(proxiedUrl, { headers }, 12000);
   } catch (error) {
     fail(`direct + proxy ont échoué (${abortMessage(error)})`);
   }
+  if (!res) fail("aucune réponse du proxy");
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     fail(`proxy HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`);
