@@ -292,6 +292,34 @@ const ERROR_KNOWLEDGE: Record<string, Omit<ErrorCodeBreakdown, "count">> = {
       "Vérifier que les sessions qui déclenchent un fallback continuent à naviguer (taux de récupération)",
     ],
   },
+  "hydration-mismatch-detail": {
+    eventName: "hydration-mismatch-detail",
+    meaning:
+      "Détail enrichi d'un mismatch d'hydratation, capté via React 19 onRecoverableError. Contient le componentStack, le digest et le message — permet d'identifier le composant fautif.",
+    commonCauses: [
+      "Même causes que hydration-error / #418 / #421 / #423",
+      "Émis en miroir des hydration-error : 1 detail = 1 erreur récupérable",
+    ],
+    fixChecklist: [
+      "Lire la propriété `component` ou `componentStack` (Umami event-data) pour cibler le fichier",
+      "Croiser avec les routes en erreur : un même composant qui apparaît partout = source unique",
+      "Vérifier le digest pour grouper les erreurs identiques",
+    ],
+  },
+  "csr-fallback-duration": {
+    eventName: "csr-fallback-duration",
+    meaning:
+      "Durée mesurée (ms) du re-render client après un échec d'hydratation. Donne le temps réel pendant lequel l'utilisateur voit un flash blanc.",
+    commonCauses: [
+      "Émis automatiquement après chaque csr-fallback-triggered",
+      "Plus la valeur est haute, plus le flash UX est visible",
+    ],
+    fixChecklist: [
+      "Médiane > 500ms = perçu comme un crash/blocage par l'utilisateur",
+      "Médiane > 1500ms = bounce quasi certain",
+      "Réduire en allégeant le bundle critique de la home (lazy load images, fonts)",
+    ],
+  },
 };
 
 export function breakdownErrorCodes(counts: EventCount[]): ErrorCodeBreakdown[] {
