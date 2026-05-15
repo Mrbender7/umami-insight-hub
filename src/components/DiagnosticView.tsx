@@ -89,6 +89,15 @@ export function DiagnosticView({ period }: { period: Period }) {
   const urlRemoved = useEvd("url-cleaned", "removed");
   const ttfb = useEvd("pageview-perf", "ttfb");
   const fcp = useEvd("pageview-perf", "fcp");
+  const adVariant = useEvd("ad-landing", "variant");
+  const adSource = useEvd("ad-landing", "source");
+  const adMedium = useEvd("ad-landing", "medium");
+  const adCampaign = useEvd("ad-landing", "campaign");
+  const adFbclid = useEvd("ad-landing", "hasFbclid");
+  const adReferrer = useEvd("ad-landing", "referrer");
+  const adWebview = useEvd("ad-landing", "webview");
+  const adApp = useEvd("ad-landing", "app");
+  const adPath = useEvd("ad-landing", "path");
 
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
