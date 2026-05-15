@@ -103,6 +103,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
               {([
                 { id: "dashboard", label: "Vue d'ensemble", icon: BarChart3 },
                 { id: "realtime", label: "Temps réel", icon: Radio },
+                { id: "acquisition", label: "Acquisition", icon: Megaphone },
                 { id: "diagnostic", label: "Diagnostic", icon: Brain },
                 { id: "countries", label: "Pays", icon: Globe2 },
                 { id: "users", label: "Utilisateurs", icon: Users },
