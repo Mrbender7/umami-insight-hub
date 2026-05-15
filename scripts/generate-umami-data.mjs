@@ -11,9 +11,13 @@ if (!API_TOKEN) {
   process.exit(1);
 }
 
-const day = 24 * 60 * 60 * 1000;
+const hour = 60 * 60 * 1000;
+const day = 24 * hour;
 const endAt = Date.now();
 const periods = {
+  "1h": { startAt: endAt - hour, endAt, unit: "hour" },
+  "6h": { startAt: endAt - 6 * hour, endAt, unit: "hour" },
+  "12h": { startAt: endAt - 12 * hour, endAt, unit: "hour" },
   "24h": { startAt: endAt - day, endAt, unit: "hour" },
   "7d": { startAt: endAt - 7 * day, endAt, unit: "day" },
   "30d": { startAt: endAt - 30 * day, endAt, unit: "day" },
