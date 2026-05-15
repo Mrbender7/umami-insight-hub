@@ -15,6 +15,8 @@ const STATIC_DATA_DEFAULT = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true
 export type DataMode = "static" | "live";
 let _dataMode: DataMode = STATIC_DATA_DEFAULT ? "static" : "live";
 const _modeListeners = new Set<(m: DataMode) => void>();
+let _lastLiveError: string | null = null;
+const _liveErrorListeners = new Set<(message: string | null) => void>();
 
 export function getDataMode(): DataMode {
   return _dataMode;
@@ -28,18 +30,29 @@ export function subscribeDataMode(fn: (m: DataMode) => void): () => void {
   _modeListeners.add(fn);
   return () => _modeListeners.delete(fn);
 }
+export function getLastLiveError(): string | null {
+  return _lastLiveError;
+}
+export function subscribeLiveError(fn: (message: string | null) => void): () => void {
+  _liveErrorListeners.add(fn);
+  return () => _liveErrorListeners.delete(fn);
+}
+function setLastLiveError(message: string | null): void {
+  _lastLiveError = message;
+  _liveErrorListeners.forEach((fn) => fn(message));
+}
 export function isStaticMode(): boolean {
   return _dataMode === "static";
 }
 export function canUseLiveMode(): boolean {
   return HAS_API_TOKEN;
 }
-// CORS proxy fallback (used uniquement si l'appel direct échoue à cause de CORS).
-// Désactivable via VITE_CORS_PROXY="".
+// Proxy CORS optionnel. Par défaut désactivé : les proxys publics ne transmettent
+// généralement pas les headers d'auth Umami et créent de très longues attentes.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
     ? (import.meta.env.VITE_CORS_PROXY as string)
-    : "https://api.allorigins.win/raw?url=";
+    : "";
 
 // On retient si le direct fonctionne pour éviter de retenter à chaque appel.
 // null = pas encore testé, true = direct OK, false = il faut passer par le proxy.
@@ -48,6 +61,17 @@ let _directWorks: boolean | null = null;
 function buildProxiedUrl(targetUrl: string) {
   if (!CORS_PROXY) return targetUrl;
   return `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
+}
+
+function abortMessage(error: unknown): string {
+  const err = error as Error;
+  return err?.name === "AbortError" ? "délai dépassé" : err?.message || "échec réseau";
+}
+
+function markLiveFailure(message: string): never {
+  setLastLiveError(message);
+  if (STATIC_DATA_DEFAULT) setDataMode("static");
+  throw new Error(message);
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
@@ -209,44 +233,45 @@ async function umamiFetch<T>(
     Authorization: `Bearer ${API_TOKEN}`,
     Accept: "application/json",
   };
+  const fail = (detail: string): never =>
+    markLiveFailure(`Mode live indisponible : ${detail}. Retour aux données statiques.`);
 
   // 1) Tentative directe (rapide). Si on sait déjà que ça échoue, on saute.
   if (_directWorks !== false) {
     try {
-      const res = await fetchWithTimeout(directUrl, { headers }, 15000);
+      const res = await fetchWithTimeout(directUrl, { headers }, 8000);
       if (res.ok) {
         _directWorks = true;
+        setLastLiveError(null);
         return (await res.json()) as T;
       }
       // 4xx/5xx authentique de l'API : on remonte l'erreur sans tenter le proxy.
       if (_directWorks === true || (res.status >= 400 && res.status < 600 && res.status !== 0)) {
         const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}.`);
+        fail(`API Umami HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`);
       }
     } catch (err) {
       // Erreur réseau / CORS / timeout → on bascule sur le proxy.
-      if (_directWorks === true) throw err;
+      if (_directWorks === true || !CORS_PROXY) fail(`appel direct échoué (${abortMessage(err)})`);
       _directWorks = false;
     }
   }
 
   // 2) Fallback proxy CORS.
   const proxiedUrl = buildProxiedUrl(directUrl);
-  let res: Response;
+  let res: Response | null = null;
   try {
-    res = await fetchWithTimeout(proxiedUrl, { headers }, 30000);
+    res = await fetchWithTimeout(proxiedUrl, { headers }, 12000);
   } catch (error) {
-    throw new Error(
-      `Fetch error: ${(error as Error).message}. Direct + proxy ont échoué. URL cible : ${directUrl}`,
-    );
+    fail(`direct + proxy ont échoué (${abortMessage(error)})`);
   }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL via proxy : ${proxiedUrl}`,
-    );
+  const response = res ?? fail("aucune réponse du proxy");
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    fail(`proxy HTTP ${response.status} ${response.statusText}${text ? ` — ${text}` : ""}`);
   }
-  return res.json() as Promise<T>;
+  setLastLiveError(null);
+  return response.json() as Promise<T>;
 }
 
 export interface EventCount {

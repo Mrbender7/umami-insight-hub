@@ -14,6 +14,7 @@ import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
   getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
+  getLastLiveError, subscribeLiveError,
 } from "@/lib/umami";
 import { logout } from "@/lib/auth";
 import { KpiCard } from "./KpiCard";
@@ -59,11 +60,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
   const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [liveError, setLiveError] = useState<string | null>(getLastLiveError());
   const queryClient = useQueryClient();
   const fetchingCount = useIsFetching();
   const liveAvailable = canUseLiveMode();
 
   useEffect(() => subscribeDataMode(setDataModeState), []);
+  useEffect(() => subscribeLiveError(setLiveError), []);
   useEffect(() => {
     if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
   }, [dataMode]);
@@ -77,26 +80,46 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   // Quand toutes les requêtes sont terminées, on coupe le chrono
   useEffect(() => {
-    if (refreshStartedAt !== null && fetchingCount === 0) {
+    if (liveError && dataMode === "static") {
+      queryClient.invalidateQueries({ refetchType: "active" });
+    }
+    if (refreshStartedAt !== null && fetchingCount === 0 && dataMode === "live" && !liveError) {
       setLastLiveRefreshAt(new Date().toISOString());
       setRefreshStartedAt(null);
       setElapsedMs(0);
     }
-  }, [fetchingCount, refreshStartedAt]);
+    if (refreshStartedAt !== null && fetchingCount === 0 && liveError) {
+      setRefreshStartedAt(null);
+      setElapsedMs(0);
+    }
+  }, [fetchingCount, refreshStartedAt, dataMode, liveError, queryClient]);
 
   async function recalcLive() {
     if (!liveAvailable) return;
     setDataMode("live");
+    setLiveError(null);
     setRefreshStartedAt(Date.now());
     setElapsedMs(0);
-    // Vide les caches static pour forcer le re-fetch sur tous les onglets actifs
-    await queryClient.invalidateQueries();
+    try {
+      // Refetch uniquement les requêtes affichées/actives : évite les vagues de requêtes invisibles.
+      await queryClient.invalidateQueries({ refetchType: "active" });
+      if (getDataMode() === "live" && !getLastLiveError()) {
+        setLastLiveRefreshAt(new Date().toISOString());
+      }
+    } catch {
+      setDataMode("static");
+      await queryClient.invalidateQueries({ refetchType: "active" });
+    } finally {
+      setRefreshStartedAt(null);
+      setElapsedMs(0);
+    }
   }
 
   function backToStatic() {
     setDataMode("static");
     queryClient.invalidateQueries();
     setLastLiveRefreshAt(null);
+    setLiveError(null);
     setRefreshStartedAt(null);
   }
 
@@ -261,6 +284,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {liveError && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+            {liveError}
+          </div>
+        )}
+
         {isLiveRefreshing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
             <div className="rounded-2xl bg-gradient-card p-8 border-neon shadow-neon flex flex-col items-center gap-4 max-w-sm mx-4">
@@ -279,7 +308,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </p>
                 {elapsedMs > 10000 && (
                   <p className="mt-2 text-[11px] text-amber-500">
-                    L'API met du temps à répondre (proxy CORS lent). Patiente encore quelques secondes.
+                    L'API met du temps à répondre. Si elle échoue, le tableau reviendra en mode statique.
                   </p>
                 )}
                 <button
