@@ -172,7 +172,9 @@ function getPeriodFromRange(range: Range): Period {
   const day = 24 * hour;
   if (range.unit === "month") return "all";
   if (range.unit === "hour") {
-    // Static data only stocke "24h" pour les périodes courtes ; on retombe dessus.
+    if (duration <= 1.5 * hour) return "1h";
+    if (duration <= 8 * hour) return "6h";
+    if (duration <= 18 * hour) return "12h";
     return "24h";
   }
   return duration <= 8 * day ? "7d" : "30d";
