@@ -103,7 +103,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="flex items-center gap-2 lg:hidden print:hidden">
               <PeriodSelector value={period} onChange={setPeriod} />
               <button
-                onClick={dataMode === "live" ? recalcLive : recalcLive}
+                onClick={recalcLive}
                 disabled={!liveAvailable || isLiveRefreshing}
                 className={
                   "inline-flex items-center justify-center rounded-lg p-2 text-xs font-medium ring-1 transition " +
