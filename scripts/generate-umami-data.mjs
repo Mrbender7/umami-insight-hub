@@ -20,6 +20,14 @@ const periods = {
   "all": { startAt: endAt - 730 * day, endAt, unit: "month" },
 };
 
+const EVENT_DATA_TARGETS = [
+  { eventName: "hydration-mismatch-detail", fields: ["component", "componentStack", "digest", "message"] },
+  { eventName: "csr-fallback-duration", fields: ["ms"] },
+  { eventName: "webview-detected", fields: ["app"] },
+  { eventName: "url-cleaned", fields: ["removed"] },
+  { eventName: "pageview-perf", fields: ["ttfb", "fcp"] },
+];
+
 async function umamiFetch(path, params = {}) {
   const url = new URL(`${API_URL}${path}`);
   Object.entries(params).forEach(([key, value]) => {
