@@ -1,7 +1,13 @@
 // Analyse approfondie des erreurs Umami pour radiosphere.be
 // Toutes les fonctions sont pures et opèrent sur les données déjà chargées.
 
-import { ERROR_EVENTS, type UmamiEvent, type EventCount, type UmamiSession } from "./umami";
+import {
+  ERROR_EVENTS,
+  type UmamiEvent,
+  type EventCount,
+  type UmamiSession,
+  type EventDataValue,
+} from "./umami";
 
 export interface QueryParamStat {
   param: string;
