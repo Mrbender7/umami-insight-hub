@@ -1189,6 +1189,159 @@ export function buildAgentPrompt(args: {
     lines.push(``);
   }
 
+  // === Sections v2 (events enrichis) ===
+  if (hydrationDetails && hydrationDetails.totalEvents > 0) {
+    lines.push(`## Détail des mismatchs d'hydratation (React 19 onRecoverableError)`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`hydration-mismatch-detail\` instrumenté côté Radio Sphere. ` +
+        `Permet d'identifier directement le composant fautif sans faire d'inférence.`,
+    );
+    lines.push(``);
+    if (hydrationDetails.topComponents.length > 0) {
+      lines.push(`**Top composants fautifs :**`);
+      lines.push(``);
+      lines.push(`| Composant / stack | Occurrences | % |`);
+      lines.push(`|---|---:|---:|`);
+      hydrationDetails.topComponents.forEach((c) => {
+        const display = c.value.length > 80 ? c.value.slice(0, 80) + "…" : c.value;
+        lines.push(`| \`${display.replace(/\|/g, "\\|")}\` | ${c.count} | ${c.pct}% |`);
+      });
+      lines.push(``);
+      lines.push(
+        `> 🎯 **Action prioritaire** : ouvrir le 1er composant de cette liste — c'est le smoking gun direct, plus besoin de \`rg\` à l'aveugle.`,
+      );
+      lines.push(``);
+    }
+    if (hydrationDetails.topDigests.length > 0) {
+      lines.push(`**Top digests (groupes d'erreurs identiques) :**`);
+      lines.push(``);
+      lines.push(`| Digest | Occurrences |`);
+      lines.push(`|---|---:|`);
+      hydrationDetails.topDigests.slice(0, 5).forEach((d) =>
+        lines.push(`| \`${d.value}\` | ${d.count} |`),
+      );
+      lines.push(``);
+    }
+    if (hydrationDetails.topMessages.length > 0) {
+      lines.push(`**Messages d'erreur observés :**`);
+      lines.push(``);
+      hydrationDetails.topMessages.forEach((m) => {
+        const trimmed = m.value.length > 200 ? m.value.slice(0, 200) + "…" : m.value;
+        lines.push(`- (${m.count}×) ${trimmed}`);
+      });
+      lines.push(``);
+    }
+  }
+
+  if (csrDuration && csrDuration.count > 0) {
+    lines.push(`## Durée mesurée du CSR fallback`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`csr-fallback-duration\` (mesure réelle via \`performance.now()\` après double rAF).`,
+    );
+    lines.push(``);
+    lines.push(`| Échantillons | Médiane | p95 | Max | > 500ms | > 1500ms |`);
+    lines.push(`|---:|---:|---:|---:|---:|---:|`);
+    lines.push(
+      `| ${csrDuration.count} | ${csrDuration.medianMs}ms | ${csrDuration.p95Ms}ms | ${csrDuration.maxMs}ms | ${csrDuration.over500ms} | ${csrDuration.over1500ms} |`,
+    );
+    lines.push(``);
+    if (csrDuration.medianMs > 1500) {
+      lines.push(
+        `> 🚨 **Médiane > 1500ms** : flash blanc visible plus d'1.5s — bounce quasi certain. Réduire le bundle critique de la home.`,
+      );
+    } else if (csrDuration.medianMs > 500) {
+      lines.push(
+        `> ⚠️ **Médiane > 500ms** : flash perçu par l'utilisateur. Acceptable à court terme, à corriger en parallèle du fix racine.`,
+      );
+    } else {
+      lines.push(
+        `> ✅ Médiane sous 500ms : le re-render est presque imperceptible. Priorité = supprimer la cause, pas la durée.`,
+      );
+    }
+    lines.push(``);
+  }
+
+  if (webViews && webViews.total > 0) {
+    lines.push(`## WebView in-app détectés (côté client)`);
+    lines.push(``);
+    lines.push(
+      `Détection client (parsing UA) émise via \`webview-detected\`. Source plus fiable que \`browser\` Umami pour les apps sociales.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total détections** : ${webViews.total}`);
+    lines.push(``);
+    if (webViews.byApp.length > 0) {
+      lines.push(`| App | Détections | % |`);
+      lines.push(`|---|---:|---:|`);
+      webViews.byApp.forEach((a) => lines.push(`| ${a.app} | ${a.count} | ${a.pct}% |`));
+      lines.push(``);
+      const top = webViews.byApp[0];
+      if (top.pct > 50) {
+        lines.push(
+          `> 🎯 **${top.pct}% via ${top.app}** — la majorité du trafic publicitaire passe par ce WebView. Tester explicitement dans cet environnement (pas Chrome desktop).`,
+        );
+        lines.push(``);
+      }
+    }
+  }
+
+  if (urlCleaned && urlCleaned.total > 0) {
+    lines.push(`## URLs nettoyées côté client (suivi du fix)`);
+    lines.push(``);
+    lines.push(
+      `Event \`url-cleaned\` émis quand \`history.replaceState\` strippe les params polluants. Permet de mesurer si le fix anti-fbclid tourne effectivement.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total nettoyages** : ${urlCleaned.total}`);
+    lines.push(``);
+    if (urlCleaned.topRemoved.length > 0) {
+      lines.push(`**Params nettoyés :**`);
+      lines.push(``);
+      lines.push(`| Param | Occurrences | % |`);
+      lines.push(`|---|---:|---:|`);
+      urlCleaned.topRemoved.forEach((r) =>
+        lines.push(`| \`${r.param}\` | ${r.count} | ${r.pct}% |`),
+      );
+      lines.push(``);
+    }
+  }
+
+  if (pageviewPerf && (pageviewPerf.ttfbCount > 0 || pageviewPerf.fcpCount > 0)) {
+    lines.push(`## Core Web Vitals (TTFB / FCP)`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`pageview-perf\` (PerformanceObserver côté client).`,
+    );
+    lines.push(``);
+    lines.push(`| Métrique | Échantillons | Médiane | p95 | Verdict |`);
+    lines.push(`|---|---:|---:|---:|---|`);
+    if (pageviewPerf.ttfbCount > 0) {
+      const v =
+        pageviewPerf.ttfbMedianMs < 800
+          ? "🟢 bon"
+          : pageviewPerf.ttfbMedianMs < 1800
+            ? "🟡 à améliorer"
+            : "🔴 mauvais";
+      lines.push(
+        `| TTFB | ${pageviewPerf.ttfbCount} | ${pageviewPerf.ttfbMedianMs}ms | ${pageviewPerf.ttfbP95Ms}ms | ${v} |`,
+      );
+    }
+    if (pageviewPerf.fcpCount > 0) {
+      const v =
+        pageviewPerf.fcpMedianMs < 1800
+          ? "🟢 bon"
+          : pageviewPerf.fcpMedianMs < 3000
+            ? "🟡 à améliorer"
+            : "🔴 mauvais";
+      lines.push(
+        `| FCP | ${pageviewPerf.fcpCount} | ${pageviewPerf.fcpMedianMs}ms | ${pageviewPerf.fcpP95Ms}ms | ${v} |`,
+      );
+    }
+    lines.push(``);
+  }
+
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(
