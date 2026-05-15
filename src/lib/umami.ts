@@ -66,6 +66,10 @@ export const EVENT_DATA_TARGETS: { eventName: string; fields: string[] }[] = [
   { eventName: "webview-detected", fields: ["app"] },
   { eventName: "url-cleaned", fields: ["removed"] },
   { eventName: "pageview-perf", fields: ["ttfb", "fcp"] },
+  {
+    eventName: "ad-landing",
+    fields: ["variant", "source", "medium", "campaign", "hasFbclid", "referrer", "webview", "app", "path"],
+  },
 ];
 
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
