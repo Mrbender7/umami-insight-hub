@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
-  BarChart3, Brain, Globe2, Users, Radio, Megaphone,
+  BarChart3, Brain, Globe2, Users, Radio, Megaphone, Zap, Loader2,
 } from "lucide-react";
 import { DiagnosticView } from "./DiagnosticView";
 import { CountriesView } from "./CountriesView";
@@ -13,6 +13,7 @@ import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
+  getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
 } from "@/lib/umami";
 import { logout } from "@/lib/auth";
 import { KpiCard } from "./KpiCard";
