@@ -492,6 +492,83 @@ export function DiagnosticView({ period }: { period: Period }) {
         </section>
       )}
 
+
+      {/* === Acquisition (ad-landing enrichi) === */}
+      {data.acquisition.total > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Acquisition — sources publicitaires & sociales
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {data.acquisition.total} arrivées trackées via <code>ad-landing</code>. Split lite/full + WebView.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/40">
+            <CsrStat label="Total" value={data.acquisition.total.toLocaleString()} />
+            <CsrStat
+              label="Lite / Full"
+              value={`${data.acquisition.liteCount} / ${data.acquisition.fullCount}`}
+            />
+            <CsrStat
+              label="WebView in-app"
+              value={`${data.acquisition.webviewPct}%`}
+              hint={`${data.acquisition.webviewCount} arrivées`}
+              danger={data.acquisition.webviewPct > 50}
+            />
+            <CsrStat
+              label="Avec fbclid"
+              value={`${data.acquisition.hasFbclidPct}%`}
+              hint={`${data.acquisition.hasFbclidCount} arrivées`}
+            />
+          </div>
+          <div className="grid sm:grid-cols-3 gap-px bg-border/40">
+            <RankList
+              title="Top sources"
+              items={data.acquisition.topSources.map((s) => ({ name: s.value, count: s.count, pct: s.pct }))}
+            />
+            <RankList
+              title="Top campagnes"
+              items={data.acquisition.topCampaigns.map((s) => ({ name: s.value, count: s.count, pct: s.pct }))}
+            />
+            <RankList
+              title="Top apps WebView"
+              items={data.acquisition.topApps.map((s) => ({ name: s.value, count: s.count, pct: s.pct }))}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* === Funnel page Lite === */}
+      {data.liteFunnel.views > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Page Lite — funnel de conversion
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Vues de <code>/lite.html</code> et conversions vers la full app / l'app Android.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-border/40">
+            <CsrStat label="Vues" value={data.liteFunnel.views.toLocaleString()} />
+            <CsrStat label="CTA Full" value={data.liteFunnel.ctaFull.toLocaleString()} />
+            <CsrStat label="CTA Android" value={data.liteFunnel.ctaAndroid.toLocaleString()} />
+            <CsrStat
+              label="Conv. Full"
+              value={`${data.liteFunnel.fullConversionRate}%`}
+              hint={data.liteFunnel.fullConversionRate < 5 ? "⚠ faible" : undefined}
+              danger={data.liteFunnel.fullConversionRate < 2}
+            />
+            <CsrStat
+              label="Conv. Android"
+              value={`${data.liteFunnel.androidConversionRate}%`}
+              danger={data.liteFunnel.androidConversionRate < 2}
+            />
+          </div>
+        </section>
+      )}
+
       {/* Hydration mismatch detail (React 19 onRecoverableError) */}
       {data.hydrationDetails.totalEvents > 0 && (
         <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
