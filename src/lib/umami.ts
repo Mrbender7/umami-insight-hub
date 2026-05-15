@@ -253,7 +253,11 @@ export async function getEventDataValues(
   eventName: string,
   fieldName: string,
 ): Promise<EventDataValue[]> {
-  if (USE_STATIC_DATA) return [];
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    const periodKey = getPeriodFromRange(range);
+    return data.periods[periodKey].eventDataValues?.[eventName]?.[fieldName] ?? [];
+  }
   return umamiFetch<EventDataValue[]>(`/websites/${WEBSITE_ID}/event-data/values`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -270,7 +274,10 @@ export interface EventDataField {
 }
 
 export async function getEventDataFields(range: Range): Promise<EventDataField[]> {
-  if (USE_STATIC_DATA) return [];
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].eventDataFields ?? [];
+  }
   return umamiFetch<EventDataField[]>(`/websites/${WEBSITE_ID}/event-data/fields`, {
     startAt: range.startAt,
     endAt: range.endAt,
