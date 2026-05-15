@@ -83,6 +83,8 @@ interface StaticPeriodData {
   events: PagedEvents;
   countries?: CountryStat[];
   sessions?: PagedSessions;
+  eventDataValues?: Record<string, Record<string, EventDataValue[]>>;
+  eventDataFields?: EventDataField[];
 }
 
 interface StaticUmamiData {
