@@ -130,6 +130,19 @@ export function DiagnosticView({ period }: { period: Period }) {
     const webViews = analyzeWebViews(wvApp.data ?? []);
     const urlCleaned = analyzeUrlCleaned(urlRemoved.data ?? []);
     const pageviewPerf = analyzePageviewPerf(ttfb.data ?? [], fcp.data ?? []);
+    const acquisition = analyzeAcquisition({
+      variant: adVariant.data ?? [],
+      source: adSource.data ?? [],
+      medium: adMedium.data ?? [],
+      campaign: adCampaign.data ?? [],
+      hasFbclid: adFbclid.data ?? [],
+      referrer: adReferrer.data ?? [],
+      webview: adWebview.data ?? [],
+      app: adApp.data ?? [],
+      path: adPath.data ?? [],
+      totalAdLanding: adLanding,
+    });
+    const liteFunnel = analyzeLiteFunnel(counts.data ?? []);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -159,6 +172,8 @@ export function DiagnosticView({ period }: { period: Period }) {
       webViews,
       urlCleaned,
       pageviewPerf,
+      acquisition,
+      liteFunnel,
     };
   }, [
     events.data,
@@ -173,6 +188,15 @@ export function DiagnosticView({ period }: { period: Period }) {
     urlRemoved.data,
     ttfb.data,
     fcp.data,
+    adVariant.data,
+    adSource.data,
+    adMedium.data,
+    adCampaign.data,
+    adFbclid.data,
+    adReferrer.data,
+    adWebview.data,
+    adApp.data,
+    adPath.data,
   ]);
 
   const agentPrompt = useMemo(
