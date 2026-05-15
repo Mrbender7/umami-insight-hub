@@ -19,7 +19,7 @@ import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
 
-type View = "dashboard" | "realtime" | "diagnostic" | "countries" | "users";
+type View = "dashboard" | "realtime" | "acquisition" | "diagnostic" | "countries" | "users";
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("24h");
