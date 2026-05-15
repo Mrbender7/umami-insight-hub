@@ -215,6 +215,8 @@ export function DiagnosticView({ period }: { period: Period }) {
         webViews: data.webViews,
         urlCleaned: data.urlCleaned,
         pageviewPerf: data.pageviewPerf,
+        acquisition: data.acquisition,
+        liteFunnel: data.liteFunnel,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
