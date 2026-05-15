@@ -18,6 +18,7 @@ import {
   getSessions,
   getEventDataValues,
   getRange,
+  getDataMode,
   type Period,
 } from "@/lib/umami";
 import {
