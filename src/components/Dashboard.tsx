@@ -57,6 +57,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [dataMode, setDataModeState] = useState(getDataMode());
   const [staticGeneratedAt, setStaticGeneratedAt] = useState<string | null>(null);
   const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
+  const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const queryClient = useQueryClient();
   const fetchingCount = useIsFetching();
   const liveAvailable = canUseLiveMode();
@@ -66,22 +68,40 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
   }, [dataMode]);
 
+  // Chrono pendant un refresh live
+  useEffect(() => {
+    if (refreshStartedAt === null) return;
+    const id = setInterval(() => setElapsedMs(Date.now() - refreshStartedAt), 200);
+    return () => clearInterval(id);
+  }, [refreshStartedAt]);
+
+  // Quand toutes les requêtes sont terminées, on coupe le chrono
+  useEffect(() => {
+    if (refreshStartedAt !== null && fetchingCount === 0) {
+      setLastLiveRefreshAt(new Date().toISOString());
+      setRefreshStartedAt(null);
+      setElapsedMs(0);
+    }
+  }, [fetchingCount, refreshStartedAt]);
+
   async function recalcLive() {
     if (!liveAvailable) return;
     setDataMode("live");
-    // Vide les caches static pour forcer le re-fetch sur tous les onglets
+    setRefreshStartedAt(Date.now());
+    setElapsedMs(0);
+    // Vide les caches static pour forcer le re-fetch sur tous les onglets actifs
     await queryClient.invalidateQueries();
-    setLastLiveRefreshAt(new Date().toISOString());
   }
 
   function backToStatic() {
     setDataMode("static");
     queryClient.invalidateQueries();
     setLastLiveRefreshAt(null);
+    setRefreshStartedAt(null);
   }
 
   const error = counts.error || series.error || events.error;
-  const isLiveRefreshing = dataMode === "live" && fetchingCount > 0;
+  const isLiveRefreshing = refreshStartedAt !== null;
 
   return (
     <div className="min-h-screen">
