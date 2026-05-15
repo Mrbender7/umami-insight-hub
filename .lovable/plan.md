@@ -1,56 +1,70 @@
+## Cause racine du symptôme
+
+En production, le dashboard lit un fichier `public/umami-data.json` pré-généré au build (`VITE_USE_STATIC_UMAMI_DATA=true`). Ce fichier ne contient que **4 buckets** : `24h`, `7d`, `30d`, `all`. Les filtres `1h`, `6h`, `12h` retombent tous sur le bucket `24h` (voir `getPeriodFromRange` dans `src/lib/umami.ts`). Conséquence visible : changer le filtre temporel ne change rien aux données affichées dans Diagnostic. Le câblage React est correct — c'est la couche données qui est figée.
+
 ## Objectif
-Étendre la page d'analyse Radiosphere pour exploiter les nouveaux events Umami (`ad-landing` enrichi, `lite-view`, `lite-cta-full`, `lite-cta-android`) en plus des 5 déjà branchés, avec filtres globaux et nouvel onglet d'acquisition.
 
-## 1. Couche données (`src/lib/umami.ts` + `scripts/generate-umami-data.mjs`)
+Garder les chargements instantanés par défaut (JSON statique = rapide, pas de quota API consommé), mais offrir un bouton **« Recalculer en direct »** qui re-fetch toutes les données depuis l'API Umami pour la période sélectionnée, avec un écran de chargement explicite. S'applique à tous les onglets.
 
-Ajouter aux events trackés :
-- `ad-landing` (déjà présent dans TRAFFIC_EVENTS) — récupérer les event-data : `variant`, `source`, `medium`, `campaign`, `hasFbclid`, `referrer`, `webview`, `app`, `path`
-- `lite-view`, `lite-cta-full`, `lite-cta-android` → ajouter à `TRAFFIC_EVENTS`
+## Approche
 
-Étendre `EVENT_DATA_TARGETS` avec les nouveaux champs `ad-landing`. Le script `generate-umami-data.mjs` itère déjà sur cette liste — un seul ajout suffit.
+Le token `VITE_UMAMI_API_TOKEN` est déjà bundlé côté client au build (cf. `.github/workflows/deploy.yml`). On peut donc taper l'API Umami directement depuis le navigateur sans backend ni proxy.
 
-## 2. Analyses (`src/lib/diagnostic.ts`)
+### 1. Forcer le mode live au niveau de la couche données
 
-Nouvelles fonctions pures :
-- `analyzeAcquisition(adLandingEvents, eventDataValues)` → totaux, split lite/full, top campagnes, top sources, top apps, taux WebView, % avec `fbclid`
-- `analyzeLiteFunnel(counts)` → `liteViews`, `ctaFull`, `ctaAndroid`, taux conversion
-- Étendre `buildAgentPrompt` avec sections "Acquisition" et "Funnel Lite"
+`src/lib/umami.ts` expose actuellement `USE_STATIC_DATA` comme une **constante de module**. À transformer en flag dynamique runtime :
 
-## 3. UI (`src/components/DiagnosticView.tsx`)
+- Remplacer la constante par un store léger (objet mutable + listeners, ou un `Atom`-like simple) avec deux modes : `static` (défaut) et `live` (forcé).
+- Chaque fonction d'accès (`getEventCounts`, `getEventSeries`, `getRecentEvents`, `getSessions`, `getCountries`, `getEventDataValues`, `getEventDataFields`, `getRealtimeSnapshot`, `getSessionActivity`) lit le flag à l'appel et choisit static vs `umamiFetch`.
+- Le fallback dégradé sur `getPeriodFromRange` (1h/6h/12h → 24h) reste utile en mode static, mais devient inutile en live (l'API accepte n'importe quel range).
 
-Réorganiser en sections nommées (titres explicites pour repérage mobile) :
-1. **Acquisition** — ad-landing split lite/full + WebView + top campagnes/sources
-2. **Page Lite** — vues, CTA, taux conversion
-3. **Santé technique** — hydration-mismatch-detail (déjà là) + csr-fallback-duration (déjà là)
-4. **Performance** — pageview-perf (déjà là)
-5. **Hygiène URL** — url-cleaned (déjà là)
+### 2. Bouton « Recalculer en direct » dans le header
 
-Tout rester dans le composant `DiagnosticView` existant pour ne pas casser le routing.
+Dans `src/components/Dashboard.tsx`, à côté du `PeriodSelector` (déjà présent dans le header) :
 
-## 4. Nouvel onglet "Acquisition" (`src/components/Dashboard.tsx`)
+- Bouton avec icône `RefreshCw` : « Recalculer en direct ».
+- État local `liveMode: boolean` + `isRefreshing: boolean`.
+- Au clic : passe le flag global en `live`, invalide toutes les queries via `queryClient.invalidateQueries()`, attend la fin de toutes les refetch, repasse `isRefreshing` à false.
+- Indicateur visuel persistant quand `liveMode=true` (badge « Live » à côté du bouton + couleur d'accent).
+- Si l'utilisateur change de période en mode live, refetch automatique (comportement React Query natif puisque les queryKeys incluent `period`).
 
-Ajouter un onglet dédié `acquisition` entre "Temps réel" et "Diagnostic", qui rend un nouveau composant `AcquisitionView`. Ce composant affiche en grand :
-- Bar chart : arrivées par source (facebook, google, instagram, direct, organic, lite)
-- Doughnut : répartition lite/full
-- Table : top campagnes
-- Table : top apps WebView
-- Filtres : période (hérite du selector global) + variant (lite/full/tous) + device
+### 3. Écran de chargement plein écran
 
-## 5. Filtres globaux
+Pendant le refresh live :
 
-Ajouter un état `variant` (`lite` | `full` | `all`) et `device` (`mobile` | `desktop` | `all`) dans `Dashboard.tsx`, propagés aux vues via props. Filtre appliqué côté client sur les `ad-landing` (via event-data `variant` + sessions `device`).
+- Overlay semi-transparent sur le contenu du dashboard (pas un blocage modal — l'utilisateur peut voir ce qui se passe).
+- Spinner centré + texte : « Récupération des données Umami en direct… ».
+- Sous-texte avec progression : « 4 / 9 requêtes terminées » (compteur basé sur le nombre de queries actives via `useIsFetching` de React Query).
+- Sur les onglets Diagnostic et Acquisition (qui font ~15 requêtes event-data en parallèle), ce compteur rassure l'utilisateur sur la fiabilité.
 
-## Périmètre exclu (à confirmer si besoin)
-- Pas de modification côté Radiosphere (events déjà émis)
-- Pas de nouveau backend / cloud
-- Filtre device limité à ce qu'expose Umami sessions (pas de UA parsing maison)
+### 4. Indication visuelle de fraîcheur
+
+Petit timestamp sous le bouton : 
+- En static : « Données figées au build du {date} » (lue depuis `umami-data.json` → `generatedAt`).
+- En live : « Rafraîchi à {heure} » (mis à jour à chaque refresh).
+
+Cela répond directement au besoin de réassurance exprimé.
+
+### 5. Persistance optionnelle
+
+- Le mode live ne persiste **pas** entre rechargements de page (sessionStorage volontairement évité — chaque session repart en static rapide).
+- Quand l'utilisateur quitte et revient, on repart sur le statique. Plus prévisible.
 
 ## Fichiers touchés
-- `src/lib/umami.ts` (events + targets)
-- `scripts/generate-umami-data.mjs` (rien si EVENT_DATA_TARGETS importé, sinon mirror)
-- `src/lib/diagnostic.ts` (2 fonctions + prompt)
-- `src/components/DiagnosticView.tsx` (sections renommées + nouvelles)
-- `src/components/Dashboard.tsx` (onglet + filtres)
-- `src/components/AcquisitionView.tsx` (nouveau)
 
-OK pour partir là-dessus ?
+- `src/lib/umami.ts` — flag runtime `dataMode` + getters/setters, branchements dans chaque fonction.
+- `src/components/Dashboard.tsx` — bouton, état, overlay de chargement, badge Live, timestamp de fraîcheur.
+- `src/components/DiagnosticView.tsx` — petite mention « Source : statique / live » à côté du titre (réutilise le flag).
+
+## Hors périmètre
+
+- Pas de cache localStorage des résultats live (pas demandé, ajoute de la complexité).
+- Pas de mode auto-refresh périodique en live.
+- Pas de modification du script `generate-umami-data.mjs` ni du workflow GitHub Pages — la génération statique reste telle quelle.
+- Pas de proxy backend (le token reste bundlé côté client comme aujourd'hui — même posture de sécurité que l'existant).
+
+## Risques / points d'attention
+
+- **Quota API Umami** : un clic sur le bouton = ~9 requêtes (Realtime), ~10 requêtes (Diagnostic event-data), etc. Acceptable car déclenché manuellement.
+- **Token exposé** : déjà le cas aujourd'hui via les autres `umamiFetch` (mode dev/non-static). Pas une régression.
+- **Race condition** si l'utilisateur change de période pendant un refresh : React Query gère via les queryKeys, pas de fix spécifique nécessaire.

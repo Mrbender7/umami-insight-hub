@@ -18,6 +18,7 @@ import {
   getSessions,
   getEventDataValues,
   getRange,
+  getDataMode,
   type Period,
 } from "@/lib/umami";
 import {
@@ -258,6 +259,10 @@ export function DiagnosticView({ period }: { period: Period }) {
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
             Analyse croisée des événements Umami pour identifier les causes racines.
+            {" · "}
+            <span className="font-medium">
+              Source : {getDataMode() === "live" ? "API live" : "JSON statique"}
+            </span>
           </p>
         </div>
         <div className="flex gap-2">

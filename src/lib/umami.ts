@@ -8,7 +8,32 @@ const WEBSITE_ID =
 const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
 const API_TOKEN = API_TOKEN_ENV ?? "";
 const HAS_API_TOKEN = API_TOKEN_ENV !== undefined && API_TOKEN_ENV !== "";
-const USE_STATIC_DATA = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
+const STATIC_DATA_DEFAULT = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
+
+// Runtime data-mode flag. Defaults to env var. Can be flipped to "live" at runtime
+// via setDataMode("live") (e.g. when the user clicks "Recalculer en direct").
+export type DataMode = "static" | "live";
+let _dataMode: DataMode = STATIC_DATA_DEFAULT ? "static" : "live";
+const _modeListeners = new Set<(m: DataMode) => void>();
+
+export function getDataMode(): DataMode {
+  return _dataMode;
+}
+export function setDataMode(mode: DataMode): void {
+  if (_dataMode === mode) return;
+  _dataMode = mode;
+  _modeListeners.forEach((fn) => fn(mode));
+}
+export function subscribeDataMode(fn: (m: DataMode) => void): () => void {
+  _modeListeners.add(fn);
+  return () => _modeListeners.delete(fn);
+}
+export function isStaticMode(): boolean {
+  return _dataMode === "static";
+}
+export function canUseLiveMode(): boolean {
+  return HAS_API_TOKEN;
+}
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
@@ -23,8 +48,8 @@ function buildProxiedUrl(targetUrl: string) {
 export function getEnvStatus() {
   return {
     websiteId: !!WEBSITE_ID,
-    apiToken: USE_STATIC_DATA || HAS_API_TOKEN,
-    apiTokenEmpty: !USE_STATIC_DATA && !HAS_API_TOKEN,
+    apiToken: isStaticMode() || HAS_API_TOKEN,
+    apiTokenEmpty: !isStaticMode() && !HAS_API_TOKEN,
     apiUrl: API_URL,
     corsProxy: CORS_PROXY,
   };
@@ -127,6 +152,15 @@ async function loadStaticData(): Promise<StaticUmamiData> {
   return staticDataPromise;
 }
 
+export async function getStaticGeneratedAt(): Promise<string | null> {
+  try {
+    const data = await loadStaticData();
+    return data.generatedAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getRange(period: Period): Range {
   const endAt = Date.now();
   const hour = 60 * 60 * 1000;
@@ -183,7 +217,7 @@ export interface EventCount {
 }
 
 export async function getEventCounts(range: Range): Promise<EventCount[]> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].counts;
   }
@@ -202,7 +236,7 @@ export interface EventSeriesPoint {
 }
 
 export async function getEventSeries(range: Range): Promise<EventSeriesPoint[]> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].series;
   }
@@ -234,7 +268,7 @@ export interface PagedEvents {
 }
 
 export async function getRecentEvents(range: Range, query?: string): Promise<PagedEvents> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].events;
   }
@@ -284,7 +318,7 @@ export async function getEventDataValues(
   eventName: string,
   fieldName: string,
 ): Promise<EventDataValue[]> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     const periodKey = getPeriodFromRange(range);
     const raw = data.periods[periodKey].eventDataValues?.[eventName]?.[fieldName] ?? [];
@@ -307,7 +341,7 @@ export interface EventDataField {
 }
 
 export async function getEventDataFields(range: Range): Promise<EventDataField[]> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].eventDataFields ?? [];
   }
@@ -324,7 +358,7 @@ export interface CountryStat {
 }
 
 export async function getCountries(range: Range): Promise<CountryStat[]> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].countries ?? [];
   }
@@ -366,7 +400,7 @@ export interface PagedSessions {
 }
 
 export async function getSessions(range: Range, query?: string): Promise<PagedSessions> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     const data = await loadStaticData();
     return data.periods[getPeriodFromRange(range)].sessions ?? { data: [], count: 0, pageSize: 0, page: 1 };
   }
@@ -443,7 +477,7 @@ export interface RealtimeData {
 //   - /events?startAt&endAt         → pages vues (eventType=1) + events (eventType=2)
 //   - /metrics?type=country|url|referrer
 export async function getRealtime(startAt?: number): Promise<RealtimeData> {
-  if (USE_STATIC_DATA) {
+  if (isStaticMode()) {
     return { visitors: [], pageviews: [], events: [], countries: [], referrers: [], urls: [] };
   }
   const endAt = Date.now();
@@ -515,7 +549,7 @@ export async function getSessionActivity(
   range: Range,
   sessionId: string,
 ): Promise<SessionActivity[]> {
-  if (USE_STATIC_DATA) return [];
+  if (isStaticMode()) return [];
   return umamiFetch<SessionActivity[]>(
     `/websites/${WEBSITE_ID}/sessions/${sessionId}/activity`,
     { startAt: range.startAt, endAt: range.endAt },

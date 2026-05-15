@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, AlertTriangle, MousePointerClick, PlayCircle, RefreshCw, LogOut, Sparkles,
-  BarChart3, Brain, Globe2, Users, Radio, Megaphone,
+  BarChart3, Brain, Globe2, Users, Radio, Megaphone, Zap, Loader2,
 } from "lucide-react";
 import { DiagnosticView } from "./DiagnosticView";
 import { CountriesView } from "./CountriesView";
@@ -13,6 +13,7 @@ import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
+  getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
 } from "@/lib/umami";
 import { logout } from "@/lib/auth";
 import { KpiCard } from "./KpiCard";
@@ -52,14 +53,35 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const totalErrors = ERROR_EVENTS.reduce((acc, name) => acc + (countMap.get(name) ?? 0), 0);
   const bounceRate = adLanding > 0 ? Math.round((earlyBounce / adLanding) * 100) : 0;
 
-  function refresh() {
-    counts.refetch();
-    series.refetch();
-    events.refetch();
+  // Mode données : statique (JSON pré-build) vs live (API Umami à la demande).
+  const [dataMode, setDataModeState] = useState(getDataMode());
+  const [staticGeneratedAt, setStaticGeneratedAt] = useState<string | null>(null);
+  const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const fetchingCount = useIsFetching();
+  const liveAvailable = canUseLiveMode();
+
+  useEffect(() => subscribeDataMode(setDataModeState), []);
+  useEffect(() => {
+    if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
+  }, [dataMode]);
+
+  async function recalcLive() {
+    if (!liveAvailable) return;
+    setDataMode("live");
+    // Vide les caches static pour forcer le re-fetch sur tous les onglets
+    await queryClient.invalidateQueries();
+    setLastLiveRefreshAt(new Date().toISOString());
   }
 
-  const isLoading = counts.isLoading || series.isLoading || events.isLoading;
+  function backToStatic() {
+    setDataMode("static");
+    queryClient.invalidateQueries();
+    setLastLiveRefreshAt(null);
+  }
+
   const error = counts.error || series.error || events.error;
+  const isLiveRefreshing = dataMode === "live" && fetchingCount > 0;
 
   return (
     <div className="min-h-screen">
@@ -81,13 +103,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="flex items-center gap-2 lg:hidden print:hidden">
               <PeriodSelector value={period} onChange={setPeriod} />
               <button
-                onClick={refresh}
-                className="inline-flex items-center justify-center rounded-lg bg-card p-2 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-                disabled={isLoading}
-                title="Rafraîchir"
-                aria-label="Rafraîchir"
+                onClick={recalcLive}
+                disabled={!liveAvailable || isLiveRefreshing}
+                className={
+                  "inline-flex items-center justify-center rounded-lg p-2 text-xs font-medium ring-1 transition " +
+                  (dataMode === "live"
+                    ? "bg-gradient-neon text-primary-foreground ring-transparent shadow-glow"
+                    : "bg-card ring-border hover:bg-accent")
+                }
+                title="Recalculer en direct (API Umami)"
+                aria-label="Recalculer en direct"
               >
-                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
+                <Zap className={"size-3.5 " + (isLiveRefreshing ? "animate-pulse" : "")} />
               </button>
               <button
                 onClick={() => { logout(); onLogout(); }}
@@ -131,14 +158,40 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             {/* Desktop-only actions next to tabs */}
             <div className="hidden lg:flex items-center gap-2">
               <PeriodSelector value={period} onChange={setPeriod} />
-              <button
-                onClick={refresh}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-                disabled={isLoading}
-              >
-                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
-                Rafraîchir
-              </button>
+              {dataMode === "live" ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-neon px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-glow">
+                    <span className="size-1.5 rounded-full bg-current animate-pulse" />
+                    Live
+                  </span>
+                  <button
+                    onClick={recalcLive}
+                    disabled={isLiveRefreshing}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-primary/40 hover:bg-accent transition"
+                    title="Re-fetcher la période courante"
+                  >
+                    <RefreshCw className={"size-3.5 " + (isLiveRefreshing ? "animate-spin" : "")} />
+                    Refresh
+                  </button>
+                  <button
+                    onClick={backToStatic}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                    title="Revenir aux données figées"
+                  >
+                    Statique
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={recalcLive}
+                  disabled={!liveAvailable || isLiveRefreshing}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-neon px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition disabled:opacity-50"
+                  title={liveAvailable ? "Re-fetch toutes les données depuis l'API Umami" : "Token API Umami absent au build"}
+                >
+                  <Zap className="size-3.5" />
+                  Recalculer en direct
+                </button>
+              )}
               <button
                 onClick={() => { logout(); onLogout(); }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
@@ -151,10 +204,57 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6">
+      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6 relative">
+        {/* Bandeau de fraîcheur */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {dataMode === "live" ? (
+              <>
+                <Zap className="size-3.5 text-primary" />
+                <span>
+                  <span className="text-foreground font-medium">Mode live</span> · données API Umami à la demande
+                  {lastLiveRefreshAt && (
+                    <> · rafraîchi à {new Date(lastLiveRefreshAt).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+                <span>
+                  Mode statique ·{" "}
+                  {staticGeneratedAt
+                    ? <>données figées au build du {new Date(staticGeneratedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}</>
+                    : <>données pré-générées</>}
+                </span>
+              </>
+            )}
+          </div>
+          {!liveAvailable && dataMode !== "live" && (
+            <span className="text-amber-600 dark:text-amber-400">Mode live indisponible (token API absent du build)</span>
+          )}
+        </div>
+
         {error && (
           <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
             {(error as Error).message}
+          </div>
+        )}
+
+        {isLiveRefreshing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+            <div className="rounded-2xl bg-gradient-card p-8 border-neon shadow-neon flex flex-col items-center gap-4 max-w-sm mx-4">
+              <Loader2 className="size-10 text-primary animate-spin" />
+              <div className="text-center">
+                <p className="font-semibold tracking-tight">Récupération en direct…</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Interrogation de l'API Umami pour la période sélectionnée.
+                </p>
+                <p className="mt-3 text-xs tabular-nums text-primary">
+                  {fetchingCount} requête{fetchingCount > 1 ? "s" : ""} en cours
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
