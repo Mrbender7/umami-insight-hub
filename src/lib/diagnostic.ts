@@ -955,6 +955,11 @@ export function buildAgentPrompt(args: {
   inAppBrowsers?: InAppBrowserStat;
   bounceImpact?: BounceImpactStat;
   suspenseTiming?: SuspenseTimingStat[];
+  hydrationDetails?: HydrationDetailStat;
+  csrDuration?: CsrDurationStat;
+  webViews?: WebViewStat;
+  urlCleaned?: UrlCleanedStat;
+  pageviewPerf?: PageviewPerfStat;
   period: string;
   generatedAt: string;
 }): string {
@@ -967,6 +972,11 @@ export function buildAgentPrompt(args: {
     inAppBrowsers,
     bounceImpact,
     suspenseTiming,
+    hydrationDetails,
+    csrDuration,
+    webViews,
+    urlCleaned,
+    pageviewPerf,
     period,
     generatedAt,
   } = args;
