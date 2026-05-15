@@ -9,6 +9,7 @@ import { CountriesView } from "./CountriesView";
 import { UsersView } from "./UsersView";
 import { RealtimeView } from "./RealtimeView";
 import { AcquisitionView } from "./AcquisitionView";
+import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
