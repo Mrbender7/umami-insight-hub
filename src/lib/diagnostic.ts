@@ -1056,6 +1056,8 @@ export function buildAgentPrompt(args: {
   webViews?: WebViewStat;
   urlCleaned?: UrlCleanedStat;
   pageviewPerf?: PageviewPerfStat;
+  acquisition?: AcquisitionStat;
+  liteFunnel?: LiteFunnelStat;
   period: string;
   generatedAt: string;
 }): string {
@@ -1073,6 +1075,8 @@ export function buildAgentPrompt(args: {
     webViews,
     urlCleaned,
     pageviewPerf,
+    acquisition,
+    liteFunnel,
     period,
     generatedAt,
   } = args;
