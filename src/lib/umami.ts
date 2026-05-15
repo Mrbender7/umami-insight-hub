@@ -34,15 +34,30 @@ export function isStaticMode(): boolean {
 export function canUseLiveMode(): boolean {
   return HAS_API_TOKEN;
 }
-// CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
+// CORS proxy fallback (used uniquement si l'appel direct échoue à cause de CORS).
+// Désactivable via VITE_CORS_PROXY="".
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
     ? (import.meta.env.VITE_CORS_PROXY as string)
     : "https://api.allorigins.win/raw?url=";
 
+// On retient si le direct fonctionne pour éviter de retenter à chaque appel.
+// null = pas encore testé, true = direct OK, false = il faut passer par le proxy.
+let _directWorks: boolean | null = null;
+
 function buildProxiedUrl(targetUrl: string) {
   if (!CORS_PROXY) return targetUrl;
   return `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function getEnvStatus() {
@@ -188,24 +203,47 @@ async function umamiFetch<T>(
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   });
-  const finalUrl = buildProxiedUrl(url.toString());
+  const directUrl = url.toString();
+  const headers = {
+    "x-umami-api-key": API_TOKEN,
+    Authorization: `Bearer ${API_TOKEN}`,
+    Accept: "application/json",
+  };
+
+  // 1) Tentative directe (rapide). Si on sait déjà que ça échoue, on saute.
+  if (_directWorks !== false) {
+    try {
+      const res = await fetchWithTimeout(directUrl, { headers }, 15000);
+      if (res.ok) {
+        _directWorks = true;
+        return (await res.json()) as T;
+      }
+      // 4xx/5xx authentique de l'API : on remonte l'erreur sans tenter le proxy.
+      if (_directWorks === true || (res.status >= 400 && res.status < 600 && res.status !== 0)) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}.`);
+      }
+    } catch (err) {
+      // Erreur réseau / CORS / timeout → on bascule sur le proxy.
+      if (_directWorks === true) throw err;
+      _directWorks = false;
+    }
+  }
+
+  // 2) Fallback proxy CORS.
+  const proxiedUrl = buildProxiedUrl(directUrl);
   let res: Response;
   try {
-    res = await fetch(finalUrl, {
-      headers: {
-        "x-umami-api-key": API_TOKEN,
-        Accept: "application/json",
-      },
-    });
+    res = await fetchWithTimeout(proxiedUrl, { headers }, 30000);
   } catch (error) {
     throw new Error(
-      `Fetch error: ${(error as Error).message}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
+      `Fetch error: ${(error as Error).message}. Direct + proxy ont échoué. URL cible : ${directUrl}`,
     );
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(
-      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
+      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL via proxy : ${proxiedUrl}`,
     );
   }
   return res.json() as Promise<T>;
