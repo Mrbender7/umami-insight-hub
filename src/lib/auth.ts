@@ -2,7 +2,7 @@ const KEY = "stats_umami_auth_v1";
 
 export function isAuthed(): boolean {
   if (typeof window === "undefined") return false;
-  return sessionStorage.getItem(KEY) === "1";
+  return true; // TEMP DEBUG
 }
 
 export function tryLogin(password: string): boolean {
