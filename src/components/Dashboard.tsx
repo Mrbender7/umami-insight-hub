@@ -110,13 +110,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <div className="flex items-center gap-2 lg:hidden print:hidden">
               <PeriodSelector value={period} onChange={setPeriod} />
               <button
-                onClick={refresh}
-                className="inline-flex items-center justify-center rounded-lg bg-card p-2 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-                disabled={isLoading}
-                title="Rafraîchir"
-                aria-label="Rafraîchir"
+                onClick={dataMode === "live" ? recalcLive : recalcLive}
+                disabled={!liveAvailable || isLiveRefreshing}
+                className={
+                  "inline-flex items-center justify-center rounded-lg p-2 text-xs font-medium ring-1 transition " +
+                  (dataMode === "live"
+                    ? "bg-gradient-neon text-primary-foreground ring-transparent shadow-glow"
+                    : "bg-card ring-border hover:bg-accent")
+                }
+                title="Recalculer en direct (API Umami)"
+                aria-label="Recalculer en direct"
               >
-                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
+                <Zap className={"size-3.5 " + (isLiveRefreshing ? "animate-pulse" : "")} />
               </button>
               <button
                 onClick={() => { logout(); onLogout(); }}
