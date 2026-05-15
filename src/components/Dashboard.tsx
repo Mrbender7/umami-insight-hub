@@ -53,14 +53,42 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const totalErrors = ERROR_EVENTS.reduce((acc, name) => acc + (countMap.get(name) ?? 0), 0);
   const bounceRate = adLanding > 0 ? Math.round((earlyBounce / adLanding) * 100) : 0;
 
+  // Mode données : statique (JSON pré-build) vs live (API Umami à la demande).
+  const [dataMode, setDataModeState] = useState(getDataMode());
+  const [staticGeneratedAt, setStaticGeneratedAt] = useState<string | null>(null);
+  const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const fetchingCount = useIsFetching();
+  const liveAvailable = canUseLiveMode();
+
+  useEffect(() => subscribeDataMode(setDataModeState), []);
+  useEffect(() => {
+    if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
+  }, [dataMode]);
+
   function refresh() {
     counts.refetch();
     series.refetch();
     events.refetch();
   }
 
+  async function recalcLive() {
+    if (!liveAvailable) return;
+    setDataMode("live");
+    // Vide les caches static pour forcer le re-fetch sur tous les onglets
+    await queryClient.invalidateQueries();
+    setLastLiveRefreshAt(new Date().toISOString());
+  }
+
+  function backToStatic() {
+    setDataMode("static");
+    queryClient.invalidateQueries();
+    setLastLiveRefreshAt(null);
+  }
+
   const isLoading = counts.isLoading || series.isLoading || events.isLoading;
   const error = counts.error || series.error || events.error;
+  const isLiveRefreshing = dataMode === "live" && fetchingCount > 0;
 
   return (
     <div className="min-h-screen">
