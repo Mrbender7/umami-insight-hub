@@ -1442,6 +1442,66 @@ export function buildAgentPrompt(args: {
     lines.push(``);
   }
 
+  if (acquisition && acquisition.total > 0) {
+    const a = acquisition;
+    lines.push(`## Acquisition (ad-landing enrichi)`);
+    lines.push(``);
+    lines.push(
+      `Event \`ad-landing\` émis 1×/onglet sur première arrivée payante/sociale (UTM, fbclid, referrer social ou WebView). Données enrichies via event-data.`,
+    );
+    lines.push(``);
+    lines.push(`- **Arrivées totales** : ${a.total}`);
+    lines.push(`- **Variant Lite** : ${a.liteCount} · **Full app** : ${a.fullCount}`);
+    lines.push(`- **WebView in-app** : ${a.webviewCount} (${a.webviewPct}%)`);
+    lines.push(`- **Avec fbclid** : ${a.hasFbclidCount} (${a.hasFbclidPct}%)`);
+    lines.push(``);
+    if (a.topSources.length > 0) {
+      lines.push(`**Top sources :**`);
+      lines.push(``);
+      lines.push(`| Source | Arrivées | % |`);
+      lines.push(`|---|---:|---:|`);
+      a.topSources.forEach((s) => lines.push(`| ${s.value} | ${s.count} | ${s.pct}% |`));
+      lines.push(``);
+    }
+    if (a.topCampaigns.length > 0) {
+      lines.push(`**Top campagnes :**`);
+      lines.push(``);
+      lines.push(`| Campagne | Arrivées | % |`);
+      lines.push(`|---|---:|---:|`);
+      a.topCampaigns.forEach((s) => lines.push(`| ${s.value} | ${s.count} | ${s.pct}% |`));
+      lines.push(``);
+    }
+    if (a.topApps.length > 0) {
+      lines.push(`**Top apps WebView (variant lite uniquement) :**`);
+      lines.push(``);
+      lines.push(`| App | Arrivées | % |`);
+      lines.push(`|---|---:|---:|`);
+      a.topApps.forEach((s) => lines.push(`| ${s.value} | ${s.count} | ${s.pct}% |`));
+      lines.push(``);
+    }
+  }
+
+  if (liteFunnel && liteFunnel.views > 0) {
+    const f = liteFunnel;
+    lines.push(`## Funnel page Lite (/lite.html)`);
+    lines.push(``);
+    lines.push(
+      `Page statique servie aux WebView pour éviter les crashs d'hydratation. Mesure de conversion vers la full app et l'app Android.`,
+    );
+    lines.push(``);
+    lines.push(`- **Vues page Lite** : ${f.views}`);
+    lines.push(`- **CTA → Full version** : ${f.ctaFull} (${f.fullConversionRate}%)`);
+    lines.push(`- **CTA → Android app** : ${f.ctaAndroid} (${f.androidConversionRate}%)`);
+    lines.push(`- **Conversion totale** : ${f.totalConversionRate}%`);
+    lines.push(``);
+    if (f.totalConversionRate < 5) {
+      lines.push(
+        `> ⚠️ Conversion <5% : la page Lite retient les visiteurs mais ne les convertit pas. Tester un CTA plus visible ou un message d'urgence.`,
+      );
+      lines.push(``);
+    }
+  }
+
   lines.push(`## Commandes d'investigation prêtes à coller`);
   lines.push(``);
   lines.push(
