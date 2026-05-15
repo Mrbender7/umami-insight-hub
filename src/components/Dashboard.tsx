@@ -211,10 +211,57 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6">
+      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6 relative">
+        {/* Bandeau de fraîcheur */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {dataMode === "live" ? (
+              <>
+                <Zap className="size-3.5 text-primary" />
+                <span>
+                  <span className="text-foreground font-medium">Mode live</span> · données API Umami à la demande
+                  {lastLiveRefreshAt && (
+                    <> · rafraîchi à {new Date(lastLiveRefreshAt).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+                <span>
+                  Mode statique ·{" "}
+                  {staticGeneratedAt
+                    ? <>données figées au build du {new Date(staticGeneratedAt).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" })}</>
+                    : <>données pré-générées</>}
+                </span>
+              </>
+            )}
+          </div>
+          {!liveAvailable && dataMode !== "live" && (
+            <span className="text-amber-600 dark:text-amber-400">Mode live indisponible (token API absent du build)</span>
+          )}
+        </div>
+
         {error && (
           <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
             {(error as Error).message}
+          </div>
+        )}
+
+        {isLiveRefreshing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+            <div className="rounded-2xl bg-gradient-card p-8 border-neon shadow-neon flex flex-col items-center gap-4 max-w-sm mx-4">
+              <Loader2 className="size-10 text-primary animate-spin" />
+              <div className="text-center">
+                <p className="font-semibold tracking-tight">Récupération en direct…</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Interrogation de l'API Umami pour la période sélectionnée.
+                </p>
+                <p className="mt-3 text-xs tabular-nums text-primary">
+                  {fetchingCount} requête{fetchingCount > 1 ? "s" : ""} en cours
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
