@@ -255,6 +255,30 @@ export interface EventDataValue {
   total: number;
 }
 
+// L'API Umami /event-data/values renvoie `{ value, total }` (pas `fieldValue`).
+// On normalise pour que les consumers puissent lire `fieldValue` de façon fiable.
+function normalizeEventDataValues(
+  raw: unknown,
+  eventName: string,
+  fieldName: string,
+): EventDataValue[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r) => {
+      const obj = (r ?? {}) as Record<string, unknown>;
+      const rawValue = obj.fieldValue ?? obj.value ?? obj.propertyValue ?? "";
+      const total = Number(obj.total ?? 0);
+      return {
+        eventName: String(obj.eventName ?? eventName),
+        fieldName: String(obj.fieldName ?? obj.propertyName ?? fieldName),
+        dataType: Number(obj.dataType ?? 0),
+        fieldValue: rawValue == null ? "" : String(rawValue),
+        total: Number.isFinite(total) ? total : 0,
+      } as EventDataValue;
+    })
+    .filter((v) => v.fieldValue.length > 0);
+}
+
 export async function getEventDataValues(
   range: Range,
   eventName: string,
@@ -263,14 +287,16 @@ export async function getEventDataValues(
   if (USE_STATIC_DATA) {
     const data = await loadStaticData();
     const periodKey = getPeriodFromRange(range);
-    return data.periods[periodKey].eventDataValues?.[eventName]?.[fieldName] ?? [];
+    const raw = data.periods[periodKey].eventDataValues?.[eventName]?.[fieldName] ?? [];
+    return normalizeEventDataValues(raw, eventName, fieldName);
   }
-  return umamiFetch<EventDataValue[]>(`/websites/${WEBSITE_ID}/event-data/values`, {
+  const raw = await umamiFetch<unknown>(`/websites/${WEBSITE_ID}/event-data/values`, {
     startAt: range.startAt,
     endAt: range.endAt,
     eventName,
     propertyName: fieldName,
   });
+  return normalizeEventDataValues(raw, eventName, fieldName);
 }
 
 export interface EventDataField {
