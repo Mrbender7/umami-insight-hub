@@ -165,14 +165,40 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             {/* Desktop-only actions next to tabs */}
             <div className="hidden lg:flex items-center gap-2">
               <PeriodSelector value={period} onChange={setPeriod} />
-              <button
-                onClick={refresh}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
-                disabled={isLoading}
-              >
-                <RefreshCw className={"size-3.5 " + (isLoading ? "animate-spin" : "")} />
-                Rafraîchir
-              </button>
+              {dataMode === "live" ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-neon px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-glow">
+                    <span className="size-1.5 rounded-full bg-current animate-pulse" />
+                    Live
+                  </span>
+                  <button
+                    onClick={recalcLive}
+                    disabled={isLiveRefreshing}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-primary/40 hover:bg-accent transition"
+                    title="Re-fetcher la période courante"
+                  >
+                    <RefreshCw className={"size-3.5 " + (isLiveRefreshing ? "animate-spin" : "")} />
+                    Refresh
+                  </button>
+                  <button
+                    onClick={backToStatic}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
+                    title="Revenir aux données figées"
+                  >
+                    Statique
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={recalcLive}
+                  disabled={!liveAvailable || isLiveRefreshing}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-neon px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition disabled:opacity-50"
+                  title={liveAvailable ? "Re-fetch toutes les données depuis l'API Umami" : "Token API Umami absent au build"}
+                >
+                  <Zap className="size-3.5" />
+                  Recalculer en direct
+                </button>
+              )}
               <button
                 onClick={() => { logout(); onLogout(); }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-card px-3 py-1.5 text-xs font-medium ring-1 ring-border hover:bg-accent transition"
