@@ -785,6 +785,161 @@ export function analyzeSuspenseTiming(allEvents: UmamiEvent[]): SuspenseTimingSt
   });
 }
 
+// ===================== Analyses des nouveaux events enrichis (v2) =====================
+
+export interface HydrationDetailStat {
+  totalEvents: number;
+  topComponents: { value: string; count: number; pct: number }[];
+  topDigests: { value: string; count: number; pct: number }[];
+  topMessages: { value: string; count: number; pct: number }[];
+}
+
+function topValues(values: EventDataValue[], total: number, limit = 8) {
+  return values
+    .slice()
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit)
+    .map((v) => ({
+      value: v.fieldValue,
+      count: v.total,
+      pct: total > 0 ? Math.round((v.total / total) * 100) : 0,
+    }));
+}
+
+function sumTotals(values: EventDataValue[]): number {
+  return values.reduce((acc, v) => acc + v.total, 0);
+}
+
+export function analyzeHydrationDetails(
+  componentValues: EventDataValue[],
+  componentStackValues: EventDataValue[],
+  digestValues: EventDataValue[],
+  messageValues: EventDataValue[],
+): HydrationDetailStat {
+  const compTotal = sumTotals(componentValues);
+  const stackTotal = sumTotals(componentStackValues);
+  // Préfère "component" si peuplé, sinon retombe sur componentStack (souvent plus bruité).
+  const primary = compTotal > 0 ? componentValues : componentStackValues;
+  const primaryTotal = compTotal > 0 ? compTotal : stackTotal;
+  const digestTotal = sumTotals(digestValues);
+  const msgTotal = sumTotals(messageValues);
+  return {
+    totalEvents: Math.max(primaryTotal, digestTotal, msgTotal),
+    topComponents: topValues(primary, primaryTotal),
+    topDigests: topValues(digestValues, digestTotal),
+    topMessages: topValues(messageValues, msgTotal, 5),
+  };
+}
+
+export interface CsrDurationStat {
+  count: number;
+  medianMs: number;
+  p95Ms: number;
+  maxMs: number;
+  over500ms: number;
+  over1500ms: number;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)));
+  return sorted[idx];
+}
+
+export function analyzeCsrDuration(msValues: EventDataValue[]): CsrDurationStat {
+  const samples: number[] = [];
+  for (const v of msValues) {
+    const n = Number(v.fieldValue);
+    if (!Number.isFinite(n) || n < 0) continue;
+    for (let i = 0; i < v.total; i++) samples.push(n);
+  }
+  samples.sort((a, b) => a - b);
+  return {
+    count: samples.length,
+    medianMs: Math.round(quantile(samples, 0.5)),
+    p95Ms: Math.round(quantile(samples, 0.95)),
+    maxMs: samples.length > 0 ? Math.round(samples[samples.length - 1]) : 0,
+    over500ms: samples.filter((v) => v > 500).length,
+    over1500ms: samples.filter((v) => v > 1500).length,
+  };
+}
+
+export interface WebViewStat {
+  total: number;
+  byApp: { app: string; count: number; pct: number }[];
+}
+
+export function analyzeWebViews(appValues: EventDataValue[]): WebViewStat {
+  const total = sumTotals(appValues);
+  return {
+    total,
+    byApp: topValues(appValues, total).map((v) => ({ app: v.value, count: v.count, pct: v.pct })),
+  };
+}
+
+export interface UrlCleanedStat {
+  total: number;
+  topRemoved: { param: string; count: number; pct: number }[];
+}
+
+export function analyzeUrlCleaned(removedValues: EventDataValue[]): UrlCleanedStat {
+  // `removed` peut être stocké sous forme de liste sérialisée (JSON, virgules…). On éclate.
+  const counter = new Map<string, number>();
+  let total = 0;
+  for (const v of removedValues) {
+    total += v.total;
+    let parts: string[] = [];
+    try {
+      const parsed = JSON.parse(v.fieldValue);
+      if (Array.isArray(parsed)) parts = parsed.map(String);
+      else parts = [String(parsed)];
+    } catch {
+      parts = v.fieldValue.split(/[,\s]+/).filter(Boolean);
+    }
+    for (const p of parts) counter.set(p, (counter.get(p) ?? 0) + v.total);
+  }
+  const topRemoved = Array.from(counter.entries())
+    .map(([param, count]) => ({ param, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  return { total, topRemoved };
+}
+
+export interface PageviewPerfStat {
+  ttfbCount: number;
+  ttfbMedianMs: number;
+  ttfbP95Ms: number;
+  fcpCount: number;
+  fcpMedianMs: number;
+  fcpP95Ms: number;
+}
+
+function expandToSamples(values: EventDataValue[]): number[] {
+  const out: number[] = [];
+  for (const v of values) {
+    const n = Number(v.fieldValue);
+    if (!Number.isFinite(n) || n < 0) continue;
+    for (let i = 0; i < v.total; i++) out.push(n);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+export function analyzePageviewPerf(
+  ttfbValues: EventDataValue[],
+  fcpValues: EventDataValue[],
+): PageviewPerfStat {
+  const ttfb = expandToSamples(ttfbValues);
+  const fcp = expandToSamples(fcpValues);
+  return {
+    ttfbCount: ttfb.length,
+    ttfbMedianMs: Math.round(quantile(ttfb, 0.5)),
+    ttfbP95Ms: Math.round(quantile(ttfb, 0.95)),
+    fcpCount: fcp.length,
+    fcpMedianMs: Math.round(quantile(fcp, 0.5)),
+    fcpP95Ms: Math.round(quantile(fcp, 0.95)),
+  };
+}
+
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
   const set = new Set<string>();
   for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
