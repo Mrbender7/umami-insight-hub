@@ -15,6 +15,8 @@ const STATIC_DATA_DEFAULT = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true
 export type DataMode = "static" | "live";
 let _dataMode: DataMode = STATIC_DATA_DEFAULT ? "static" : "live";
 const _modeListeners = new Set<(m: DataMode) => void>();
+let _lastLiveError: string | null = null;
+const _liveErrorListeners = new Set<(message: string | null) => void>();
 
 export function getDataMode(): DataMode {
   return _dataMode;
@@ -28,18 +30,29 @@ export function subscribeDataMode(fn: (m: DataMode) => void): () => void {
   _modeListeners.add(fn);
   return () => _modeListeners.delete(fn);
 }
+export function getLastLiveError(): string | null {
+  return _lastLiveError;
+}
+export function subscribeLiveError(fn: (message: string | null) => void): () => void {
+  _liveErrorListeners.add(fn);
+  return () => _liveErrorListeners.delete(fn);
+}
+function setLastLiveError(message: string | null): void {
+  _lastLiveError = message;
+  _liveErrorListeners.forEach((fn) => fn(message));
+}
 export function isStaticMode(): boolean {
   return _dataMode === "static";
 }
 export function canUseLiveMode(): boolean {
   return HAS_API_TOKEN;
 }
-// CORS proxy fallback (used uniquement si l'appel direct échoue à cause de CORS).
-// Désactivable via VITE_CORS_PROXY="".
+// Proxy CORS optionnel. Par défaut désactivé : les proxys publics ne transmettent
+// généralement pas les headers d'auth Umami et créent de très longues attentes.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
     ? (import.meta.env.VITE_CORS_PROXY as string)
-    : "https://api.allorigins.win/raw?url=";
+    : "";
 
 // On retient si le direct fonctionne pour éviter de retenter à chaque appel.
 // null = pas encore testé, true = direct OK, false = il faut passer par le proxy.
