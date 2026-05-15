@@ -16,6 +16,7 @@ import {
   getEventSeries,
   getRecentEvents,
   getSessions,
+  getEventDataValues,
   getRange,
   type Period,
 } from "@/lib/umami";
@@ -33,6 +34,11 @@ import {
   analyzeInAppBrowsers,
   analyzeBounceImpact,
   analyzeSuspenseTiming,
+  analyzeHydrationDetails,
+  analyzeCsrDuration,
+  analyzeWebViews,
+  analyzeUrlCleaned,
+  analyzePageviewPerf,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
