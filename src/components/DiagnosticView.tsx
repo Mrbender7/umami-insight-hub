@@ -39,6 +39,8 @@ import {
   analyzeWebViews,
   analyzeUrlCleaned,
   analyzePageviewPerf,
+  analyzeAcquisition,
+  analyzeLiteFunnel,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
