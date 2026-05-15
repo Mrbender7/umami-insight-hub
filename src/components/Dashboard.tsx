@@ -281,6 +281,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
+        {liveError && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+            {liveError}
+          </div>
+        )}
+
         {isLiveRefreshing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
             <div className="rounded-2xl bg-gradient-card p-8 border-neon shadow-neon flex flex-col items-center gap-4 max-w-sm mx-4">
@@ -299,7 +305,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </p>
                 {elapsedMs > 10000 && (
                   <p className="mt-2 text-[11px] text-amber-500">
-                    L'API met du temps à répondre (proxy CORS lent). Patiente encore quelques secondes.
+                    L'API met du temps à répondre. Si elle échoue, le tableau reviendra en mode statique.
                   </p>
                 )}
                 <button
