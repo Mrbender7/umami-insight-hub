@@ -73,20 +73,20 @@ export function DiagnosticView({ period }: { period: Period }) {
   });
 
   // Event-data des 5 nouveaux events instrumentés (chargés en parallèle, vide en mode statique si non générés).
-  const evd = (eventName: string, fieldName: string) =>
+  const useEvd = (eventName: string, fieldName: string) =>
     useQuery({
       queryKey: ["umami-evd", period, eventName, fieldName],
       queryFn: () => getEventDataValues(range, eventName, fieldName),
     });
-  const hmComponent = evd("hydration-mismatch-detail", "component");
-  const hmStack = evd("hydration-mismatch-detail", "componentStack");
-  const hmDigest = evd("hydration-mismatch-detail", "digest");
-  const hmMessage = evd("hydration-mismatch-detail", "message");
-  const csrMs = evd("csr-fallback-duration", "ms");
-  const wvApp = evd("webview-detected", "app");
-  const urlRemoved = evd("url-cleaned", "removed");
-  const ttfb = evd("pageview-perf", "ttfb");
-  const fcp = evd("pageview-perf", "fcp");
+  const hmComponent = useEvd("hydration-mismatch-detail", "component");
+  const hmStack = useEvd("hydration-mismatch-detail", "componentStack");
+  const hmDigest = useEvd("hydration-mismatch-detail", "digest");
+  const hmMessage = useEvd("hydration-mismatch-detail", "message");
+  const csrMs = useEvd("csr-fallback-duration", "ms");
+  const wvApp = useEvd("webview-detected", "app");
+  const urlRemoved = useEvd("url-cleaned", "removed");
+  const ttfb = useEvd("pageview-perf", "ttfb");
+  const fcp = useEvd("pageview-perf", "fcp");
 
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
