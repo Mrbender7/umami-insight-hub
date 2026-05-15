@@ -16,6 +16,7 @@ import {
   getEventSeries,
   getRecentEvents,
   getSessions,
+  getEventDataValues,
   getRange,
   type Period,
 } from "@/lib/umami";
@@ -33,6 +34,11 @@ import {
   analyzeInAppBrowsers,
   analyzeBounceImpact,
   analyzeSuspenseTiming,
+  analyzeHydrationDetails,
+  analyzeCsrDuration,
+  analyzeWebViews,
+  analyzeUrlCleaned,
+  analyzePageviewPerf,
 } from "@/lib/diagnostic";
 
 const PERIOD_LABEL: Record<Period, string> = {
@@ -66,6 +72,22 @@ export function DiagnosticView({ period }: { period: Period }) {
     queryFn: () => getSessions(range),
   });
 
+  // Event-data des 5 nouveaux events instrumentés (chargés en parallèle, vide en mode statique si non générés).
+  const useEvd = (eventName: string, fieldName: string) =>
+    useQuery({
+      queryKey: ["umami-evd", period, eventName, fieldName],
+      queryFn: () => getEventDataValues(range, eventName, fieldName),
+    });
+  const hmComponent = useEvd("hydration-mismatch-detail", "component");
+  const hmStack = useEvd("hydration-mismatch-detail", "componentStack");
+  const hmDigest = useEvd("hydration-mismatch-detail", "digest");
+  const hmMessage = useEvd("hydration-mismatch-detail", "message");
+  const csrMs = useEvd("csr-fallback-duration", "ms");
+  const wvApp = useEvd("webview-detected", "app");
+  const urlRemoved = useEvd("url-cleaned", "removed");
+  const ttfb = useEvd("pageview-perf", "ttfb");
+  const fcp = useEvd("pageview-perf", "fcp");
+
   const data = useMemo(() => {
     const allEvents = events.data?.data ?? [];
     const allSessions = sessionsQ.data?.data ?? [];
@@ -87,6 +109,16 @@ export function DiagnosticView({ period }: { period: Period }) {
     const inAppBrowsers = analyzeInAppBrowsers(allEvents, allSessions);
     const bounceImpact = analyzeBounceImpact(allEvents, allSessions);
     const suspenseTiming = analyzeSuspenseTiming(allEvents);
+    const hydrationDetails = analyzeHydrationDetails(
+      hmComponent.data ?? [],
+      hmStack.data ?? [],
+      hmDigest.data ?? [],
+      hmMessage.data ?? [],
+    );
+    const csrDuration = analyzeCsrDuration(csrMs.data ?? []);
+    const webViews = analyzeWebViews(wvApp.data ?? []);
+    const urlCleaned = analyzeUrlCleaned(urlRemoved.data ?? []);
+    const pageviewPerf = analyzePageviewPerf(ttfb.data ?? [], fcp.data ?? []);
     const hypotheses = generateHypotheses({
       queryParams,
       routes,
@@ -111,8 +143,26 @@ export function DiagnosticView({ period }: { period: Period }) {
       inAppBrowsers,
       bounceImpact,
       suspenseTiming,
+      hydrationDetails,
+      csrDuration,
+      webViews,
+      urlCleaned,
+      pageviewPerf,
     };
-  }, [events.data, counts.data, sessionsQ.data]);
+  }, [
+    events.data,
+    counts.data,
+    sessionsQ.data,
+    hmComponent.data,
+    hmStack.data,
+    hmDigest.data,
+    hmMessage.data,
+    csrMs.data,
+    wvApp.data,
+    urlRemoved.data,
+    ttfb.data,
+    fcp.data,
+  ]);
 
   const agentPrompt = useMemo(
     () =>
@@ -125,6 +175,11 @@ export function DiagnosticView({ period }: { period: Period }) {
         inAppBrowsers: data.inAppBrowsers,
         bounceImpact: data.bounceImpact,
         suspenseTiming: data.suspenseTiming,
+        hydrationDetails: data.hydrationDetails,
+        csrDuration: data.csrDuration,
+        webViews: data.webViews,
+        urlCleaned: data.urlCleaned,
+        pageviewPerf: data.pageviewPerf,
         period: PERIOD_LABEL[period],
         generatedAt: new Date().toISOString(),
       }),
@@ -397,6 +452,226 @@ export function DiagnosticView({ period }: { period: Period }) {
               )}
             </div>
           </div>
+        </section>
+      )}
+
+      {/* Hydration mismatch detail (React 19 onRecoverableError) */}
+      {data.hydrationDetails.totalEvents > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+              <Brain className="size-4 text-primary" />
+              Composants fautifs (hydration-mismatch-detail)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {data.hydrationDetails.totalEvents} détails capturés via React 19{" "}
+              <code>onRecoverableError</code> — smoking gun direct.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-px bg-border/40">
+            <div className="bg-card/20 p-5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Top composants
+              </p>
+              {data.hydrationDetails.topComponents.length === 0 ? (
+                <p className="text-xs text-muted-foreground">—</p>
+              ) : (
+                <ul className="space-y-1.5 text-xs">
+                  {data.hydrationDetails.topComponents.slice(0, 6).map((c, i) => (
+                    <li key={i} className="flex justify-between gap-3">
+                      <code className="font-mono text-foreground/80 truncate" title={c.value}>
+                        {c.value.length > 60 ? c.value.slice(0, 60) + "…" : c.value}
+                      </code>
+                      <span className="tabular-nums font-semibold shrink-0">
+                        {c.count} <span className="text-muted-foreground">({c.pct}%)</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="bg-card/20 p-5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                Digests / messages
+              </p>
+              {data.hydrationDetails.topDigests.length > 0 && (
+                <ul className="space-y-1 text-xs mb-2">
+                  {data.hydrationDetails.topDigests.slice(0, 4).map((d, i) => (
+                    <li key={i} className="flex justify-between gap-3">
+                      <code className="font-mono text-foreground/70">{d.value}</code>
+                      <span className="tabular-nums">{d.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {data.hydrationDetails.topMessages.slice(0, 3).map((m, i) => (
+                <p key={i} className="text-[11px] text-muted-foreground italic">
+                  ({m.count}×) {m.value.length > 100 ? m.value.slice(0, 100) + "…" : m.value}
+                </p>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* CSR fallback duration */}
+      {data.csrDuration.count > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+              <Clock className="size-4" />
+              Durée du flash CSR fallback (mesure réelle)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Temps que voit l'utilisateur entre l'échec d'hydratation et le re-render complet.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-border/40">
+            <CsrStat label="Échantillons" value={data.csrDuration.count.toLocaleString()} />
+            <CsrStat
+              label="Médiane"
+              value={`${data.csrDuration.medianMs}ms`}
+              danger={data.csrDuration.medianMs > 1500}
+              hint={
+                data.csrDuration.medianMs > 1500
+                  ? "🚨 bounce probable"
+                  : data.csrDuration.medianMs > 500
+                    ? "⚠ flash perçu"
+                    : "imperceptible"
+              }
+            />
+            <CsrStat label="p95" value={`${data.csrDuration.p95Ms}ms`} />
+            <CsrStat label="> 500ms" value={data.csrDuration.over500ms.toLocaleString()} />
+            <CsrStat
+              label="> 1500ms"
+              value={data.csrDuration.over1500ms.toLocaleString()}
+              danger={data.csrDuration.over1500ms > 0}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* WebView detection */}
+      {data.webViews.total > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">
+              WebView in-app détectés (côté client)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {data.webViews.total} détections via parsing UA — plus fiable que le champ{" "}
+              <code>browser</code> Umami.
+            </p>
+          </div>
+          <div className="p-5">
+            <ul className="space-y-1.5 text-xs">
+              {data.webViews.byApp.map((a) => (
+                <li key={a.app} className="flex items-center gap-3">
+                  <span className="font-medium w-32 truncate">{a.app}</span>
+                  <div className="flex-1 h-2 rounded-full bg-card/40 overflow-hidden">
+                    <div className="h-full bg-gradient-neon" style={{ width: `${a.pct}%` }} />
+                  </div>
+                  <span className="tabular-nums font-semibold w-20 text-right">
+                    {a.count} <span className="text-muted-foreground">({a.pct}%)</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {/* URL cleaned */}
+      {data.urlCleaned.total > 0 && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+              <Check className="size-4 text-primary" />
+              URLs nettoyées côté client (suivi du fix)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {data.urlCleaned.total} nettoyages via <code>history.replaceState</code>.
+            </p>
+          </div>
+          <div className="p-5">
+            <ul className="space-y-1 text-xs">
+              {data.urlCleaned.topRemoved.map((r) => (
+                <li key={r.param} className="flex justify-between gap-3">
+                  <code className="font-mono text-foreground/80">{r.param}</code>
+                  <span className="tabular-nums font-semibold">
+                    {r.count} <span className="text-muted-foreground">({r.pct}%)</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {/* Pageview perf */}
+      {(data.pageviewPerf.ttfbCount > 0 || data.pageviewPerf.fcpCount > 0) && (
+        <section className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden print:break-inside-avoid">
+          <div className="px-5 py-4 border-b border-border/60">
+            <h3 className="text-sm font-semibold tracking-tight">Core Web Vitals (TTFB / FCP)</h3>
+            <p className="text-xs text-muted-foreground">
+              Mesuré côté client via <code>PerformanceObserver</code>.
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-card/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left font-medium px-5 py-3">Métrique</th>
+                <th className="text-right font-medium px-5 py-3">Échantillons</th>
+                <th className="text-right font-medium px-5 py-3">Médiane</th>
+                <th className="text-right font-medium px-5 py-3">p95</th>
+                <th className="text-left font-medium px-5 py-3">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.pageviewPerf.ttfbCount > 0 && (
+                <tr className="border-t border-border/40">
+                  <td className="px-5 py-2.5 font-mono text-xs">TTFB</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">
+                    {data.pageviewPerf.ttfbCount}
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums font-semibold">
+                    {data.pageviewPerf.ttfbMedianMs}ms
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">
+                    {data.pageviewPerf.ttfbP95Ms}ms
+                  </td>
+                  <td className="px-5 py-2.5 text-xs">
+                    {data.pageviewPerf.ttfbMedianMs < 800
+                      ? "🟢 bon"
+                      : data.pageviewPerf.ttfbMedianMs < 1800
+                        ? "🟡 à améliorer"
+                        : "🔴 mauvais"}
+                  </td>
+                </tr>
+              )}
+              {data.pageviewPerf.fcpCount > 0 && (
+                <tr className="border-t border-border/40">
+                  <td className="px-5 py-2.5 font-mono text-xs">FCP</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">
+                    {data.pageviewPerf.fcpCount}
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums font-semibold">
+                    {data.pageviewPerf.fcpMedianMs}ms
+                  </td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">
+                    {data.pageviewPerf.fcpP95Ms}ms
+                  </td>
+                  <td className="px-5 py-2.5 text-xs">
+                    {data.pageviewPerf.fcpMedianMs < 1800
+                      ? "🟢 bon"
+                      : data.pageviewPerf.fcpMedianMs < 3000
+                        ? "🟡 à améliorer"
+                        : "🔴 mauvais"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
       )}
 

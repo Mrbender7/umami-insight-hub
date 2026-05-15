@@ -36,6 +36,9 @@ export const TRAFFIC_EVENTS = [
   "pwa-install-available",
   "stream-play",
   "play-store-click",
+  "url-cleaned",
+  "webview-detected",
+  "pageview-perf",
 ] as const;
 
 export const ERROR_EVENTS = [
@@ -49,7 +52,18 @@ export const ERROR_EVENTS = [
   "route-error-open-external",
   "route-error-copy-link",
   "csr-fallback-triggered",
+  "hydration-mismatch-detail",
+  "csr-fallback-duration",
 ] as const;
+
+// Events dont on veut récupérer les event-data (propriétés custom) pour analyse fine.
+export const EVENT_DATA_TARGETS: { eventName: string; fields: string[] }[] = [
+  { eventName: "hydration-mismatch-detail", fields: ["component", "componentStack", "digest", "message"] },
+  { eventName: "csr-fallback-duration", fields: ["ms"] },
+  { eventName: "webview-detected", fields: ["app"] },
+  { eventName: "url-cleaned", fields: ["removed"] },
+  { eventName: "pageview-perf", fields: ["ttfb", "fcp"] },
+];
 
 export const ALL_EVENTS = [...TRAFFIC_EVENTS, ...ERROR_EVENTS] as const;
 export type EventName = (typeof ALL_EVENTS)[number];
@@ -69,6 +83,8 @@ interface StaticPeriodData {
   events: PagedEvents;
   countries?: CountryStat[];
   sessions?: PagedSessions;
+  eventDataValues?: Record<string, Record<string, EventDataValue[]>>;
+  eventDataFields?: EventDataField[];
 }
 
 interface StaticUmamiData {
@@ -237,7 +253,11 @@ export async function getEventDataValues(
   eventName: string,
   fieldName: string,
 ): Promise<EventDataValue[]> {
-  if (USE_STATIC_DATA) return [];
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    const periodKey = getPeriodFromRange(range);
+    return data.periods[periodKey].eventDataValues?.[eventName]?.[fieldName] ?? [];
+  }
   return umamiFetch<EventDataValue[]>(`/websites/${WEBSITE_ID}/event-data/values`, {
     startAt: range.startAt,
     endAt: range.endAt,
@@ -254,7 +274,10 @@ export interface EventDataField {
 }
 
 export async function getEventDataFields(range: Range): Promise<EventDataField[]> {
-  if (USE_STATIC_DATA) return [];
+  if (USE_STATIC_DATA) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].eventDataFields ?? [];
+  }
   return umamiFetch<EventDataField[]>(`/websites/${WEBSITE_ID}/event-data/fields`, {
     startAt: range.startAt,
     endAt: range.endAt,

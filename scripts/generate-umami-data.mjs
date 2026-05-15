@@ -20,6 +20,14 @@ const periods = {
   "all": { startAt: endAt - 730 * day, endAt, unit: "month" },
 };
 
+const EVENT_DATA_TARGETS = [
+  { eventName: "hydration-mismatch-detail", fields: ["component", "componentStack", "digest", "message"] },
+  { eventName: "csr-fallback-duration", fields: ["ms"] },
+  { eventName: "webview-detected", fields: ["app"] },
+  { eventName: "url-cleaned", fields: ["removed"] },
+  { eventName: "pageview-perf", fields: ["ttfb", "fcp"] },
+];
+
 async function umamiFetch(path, params = {}) {
   const url = new URL(`${API_URL}${path}`);
   Object.entries(params).forEach(([key, value]) => {
@@ -85,6 +93,42 @@ for (const [period, range] of Object.entries(periods)) {
       orderBy: "lastAt",
     }),
   };
+
+  // Event-data : champs disponibles + valeurs pour les events ciblés.
+  try {
+    data.periods[period].eventDataFields = await umamiFetch(
+      `/websites/${WEBSITE_ID}/event-data/fields`,
+      { startAt: range.startAt, endAt: range.endAt },
+    );
+  } catch (err) {
+    console.warn(`event-data/fields KO pour ${period}:`, err.message);
+    data.periods[period].eventDataFields = [];
+  }
+
+  const valuesByEvent = {};
+  for (const target of EVENT_DATA_TARGETS) {
+    valuesByEvent[target.eventName] = {};
+    for (const fieldName of target.fields) {
+      try {
+        valuesByEvent[target.eventName][fieldName] = await umamiFetch(
+          `/websites/${WEBSITE_ID}/event-data/values`,
+          {
+            startAt: range.startAt,
+            endAt: range.endAt,
+            eventName: target.eventName,
+            propertyName: fieldName,
+          },
+        );
+      } catch (err) {
+        console.warn(
+          `event-data/values KO pour ${period} ${target.eventName}.${fieldName}:`,
+          err.message,
+        );
+        valuesByEvent[target.eventName][fieldName] = [];
+      }
+    }
+  }
+  data.periods[period].eventDataValues = valuesByEvent;
 }
 
 await mkdir(dirname(OUTPUT_PATH), { recursive: true });

@@ -1,7 +1,13 @@
 // Analyse approfondie des erreurs Umami pour radiosphere.be
 // Toutes les fonctions sont pures et opèrent sur les données déjà chargées.
 
-import { ERROR_EVENTS, type UmamiEvent, type EventCount, type UmamiSession } from "./umami";
+import {
+  ERROR_EVENTS,
+  type UmamiEvent,
+  type EventCount,
+  type UmamiSession,
+  type EventDataValue,
+} from "./umami";
 
 export interface QueryParamStat {
   param: string;
@@ -284,6 +290,34 @@ const ERROR_KNOWLEDGE: Record<string, Omit<ErrorCodeBreakdown, "count">> = {
       "Corriger les hydration-error en amont éliminera ces fallback automatiquement",
       "Mesurer le ratio fallback/hydration-error : >50% = utilisateurs voient un flash",
       "Vérifier que les sessions qui déclenchent un fallback continuent à naviguer (taux de récupération)",
+    ],
+  },
+  "hydration-mismatch-detail": {
+    eventName: "hydration-mismatch-detail",
+    meaning:
+      "Détail enrichi d'un mismatch d'hydratation, capté via React 19 onRecoverableError. Contient le componentStack, le digest et le message — permet d'identifier le composant fautif.",
+    commonCauses: [
+      "Même causes que hydration-error / #418 / #421 / #423",
+      "Émis en miroir des hydration-error : 1 detail = 1 erreur récupérable",
+    ],
+    fixChecklist: [
+      "Lire la propriété `component` ou `componentStack` (Umami event-data) pour cibler le fichier",
+      "Croiser avec les routes en erreur : un même composant qui apparaît partout = source unique",
+      "Vérifier le digest pour grouper les erreurs identiques",
+    ],
+  },
+  "csr-fallback-duration": {
+    eventName: "csr-fallback-duration",
+    meaning:
+      "Durée mesurée (ms) du re-render client après un échec d'hydratation. Donne le temps réel pendant lequel l'utilisateur voit un flash blanc.",
+    commonCauses: [
+      "Émis automatiquement après chaque csr-fallback-triggered",
+      "Plus la valeur est haute, plus le flash UX est visible",
+    ],
+    fixChecklist: [
+      "Médiane > 500ms = perçu comme un crash/blocage par l'utilisateur",
+      "Médiane > 1500ms = bounce quasi certain",
+      "Réduire en allégeant le bundle critique de la home (lazy load images, fonts)",
     ],
   },
 };
@@ -751,6 +785,161 @@ export function analyzeSuspenseTiming(allEvents: UmamiEvent[]): SuspenseTimingSt
   });
 }
 
+// ===================== Analyses des nouveaux events enrichis (v2) =====================
+
+export interface HydrationDetailStat {
+  totalEvents: number;
+  topComponents: { value: string; count: number; pct: number }[];
+  topDigests: { value: string; count: number; pct: number }[];
+  topMessages: { value: string; count: number; pct: number }[];
+}
+
+function topValues(values: EventDataValue[], total: number, limit = 8) {
+  return values
+    .slice()
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit)
+    .map((v) => ({
+      value: v.fieldValue,
+      count: v.total,
+      pct: total > 0 ? Math.round((v.total / total) * 100) : 0,
+    }));
+}
+
+function sumTotals(values: EventDataValue[]): number {
+  return values.reduce((acc, v) => acc + v.total, 0);
+}
+
+export function analyzeHydrationDetails(
+  componentValues: EventDataValue[],
+  componentStackValues: EventDataValue[],
+  digestValues: EventDataValue[],
+  messageValues: EventDataValue[],
+): HydrationDetailStat {
+  const compTotal = sumTotals(componentValues);
+  const stackTotal = sumTotals(componentStackValues);
+  // Préfère "component" si peuplé, sinon retombe sur componentStack (souvent plus bruité).
+  const primary = compTotal > 0 ? componentValues : componentStackValues;
+  const primaryTotal = compTotal > 0 ? compTotal : stackTotal;
+  const digestTotal = sumTotals(digestValues);
+  const msgTotal = sumTotals(messageValues);
+  return {
+    totalEvents: Math.max(primaryTotal, digestTotal, msgTotal),
+    topComponents: topValues(primary, primaryTotal),
+    topDigests: topValues(digestValues, digestTotal),
+    topMessages: topValues(messageValues, msgTotal, 5),
+  };
+}
+
+export interface CsrDurationStat {
+  count: number;
+  medianMs: number;
+  p95Ms: number;
+  maxMs: number;
+  over500ms: number;
+  over1500ms: number;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)));
+  return sorted[idx];
+}
+
+export function analyzeCsrDuration(msValues: EventDataValue[]): CsrDurationStat {
+  const samples: number[] = [];
+  for (const v of msValues) {
+    const n = Number(v.fieldValue);
+    if (!Number.isFinite(n) || n < 0) continue;
+    for (let i = 0; i < v.total; i++) samples.push(n);
+  }
+  samples.sort((a, b) => a - b);
+  return {
+    count: samples.length,
+    medianMs: Math.round(quantile(samples, 0.5)),
+    p95Ms: Math.round(quantile(samples, 0.95)),
+    maxMs: samples.length > 0 ? Math.round(samples[samples.length - 1]) : 0,
+    over500ms: samples.filter((v) => v > 500).length,
+    over1500ms: samples.filter((v) => v > 1500).length,
+  };
+}
+
+export interface WebViewStat {
+  total: number;
+  byApp: { app: string; count: number; pct: number }[];
+}
+
+export function analyzeWebViews(appValues: EventDataValue[]): WebViewStat {
+  const total = sumTotals(appValues);
+  return {
+    total,
+    byApp: topValues(appValues, total).map((v) => ({ app: v.value, count: v.count, pct: v.pct })),
+  };
+}
+
+export interface UrlCleanedStat {
+  total: number;
+  topRemoved: { param: string; count: number; pct: number }[];
+}
+
+export function analyzeUrlCleaned(removedValues: EventDataValue[]): UrlCleanedStat {
+  // `removed` peut être stocké sous forme de liste sérialisée (JSON, virgules…). On éclate.
+  const counter = new Map<string, number>();
+  let total = 0;
+  for (const v of removedValues) {
+    total += v.total;
+    let parts: string[] = [];
+    try {
+      const parsed = JSON.parse(v.fieldValue);
+      if (Array.isArray(parsed)) parts = parsed.map(String);
+      else parts = [String(parsed)];
+    } catch {
+      parts = v.fieldValue.split(/[,\s]+/).filter(Boolean);
+    }
+    for (const p of parts) counter.set(p, (counter.get(p) ?? 0) + v.total);
+  }
+  const topRemoved = Array.from(counter.entries())
+    .map(([param, count]) => ({ param, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  return { total, topRemoved };
+}
+
+export interface PageviewPerfStat {
+  ttfbCount: number;
+  ttfbMedianMs: number;
+  ttfbP95Ms: number;
+  fcpCount: number;
+  fcpMedianMs: number;
+  fcpP95Ms: number;
+}
+
+function expandToSamples(values: EventDataValue[]): number[] {
+  const out: number[] = [];
+  for (const v of values) {
+    const n = Number(v.fieldValue);
+    if (!Number.isFinite(n) || n < 0) continue;
+    for (let i = 0; i < v.total; i++) out.push(n);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+export function analyzePageviewPerf(
+  ttfbValues: EventDataValue[],
+  fcpValues: EventDataValue[],
+): PageviewPerfStat {
+  const ttfb = expandToSamples(ttfbValues);
+  const fcp = expandToSamples(fcpValues);
+  return {
+    ttfbCount: ttfb.length,
+    ttfbMedianMs: Math.round(quantile(ttfb, 0.5)),
+    ttfbP95Ms: Math.round(quantile(ttfb, 0.95)),
+    fcpCount: fcp.length,
+    fcpMedianMs: Math.round(quantile(fcp, 0.5)),
+    fcpP95Ms: Math.round(quantile(fcp, 0.95)),
+  };
+}
+
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
   const set = new Set<string>();
   for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
@@ -766,6 +955,11 @@ export function buildAgentPrompt(args: {
   inAppBrowsers?: InAppBrowserStat;
   bounceImpact?: BounceImpactStat;
   suspenseTiming?: SuspenseTimingStat[];
+  hydrationDetails?: HydrationDetailStat;
+  csrDuration?: CsrDurationStat;
+  webViews?: WebViewStat;
+  urlCleaned?: UrlCleanedStat;
+  pageviewPerf?: PageviewPerfStat;
   period: string;
   generatedAt: string;
 }): string {
@@ -778,6 +972,11 @@ export function buildAgentPrompt(args: {
     inAppBrowsers,
     bounceImpact,
     suspenseTiming,
+    hydrationDetails,
+    csrDuration,
+    webViews,
+    urlCleaned,
+    pageviewPerf,
     period,
     generatedAt,
   } = args;
@@ -987,6 +1186,159 @@ export function buildAgentPrompt(args: {
         );
       }
     });
+    lines.push(``);
+  }
+
+  // === Sections v2 (events enrichis) ===
+  if (hydrationDetails && hydrationDetails.totalEvents > 0) {
+    lines.push(`## Détail des mismatchs d'hydratation (React 19 onRecoverableError)`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`hydration-mismatch-detail\` instrumenté côté Radio Sphere. ` +
+        `Permet d'identifier directement le composant fautif sans faire d'inférence.`,
+    );
+    lines.push(``);
+    if (hydrationDetails.topComponents.length > 0) {
+      lines.push(`**Top composants fautifs :**`);
+      lines.push(``);
+      lines.push(`| Composant / stack | Occurrences | % |`);
+      lines.push(`|---|---:|---:|`);
+      hydrationDetails.topComponents.forEach((c) => {
+        const display = c.value.length > 80 ? c.value.slice(0, 80) + "…" : c.value;
+        lines.push(`| \`${display.replace(/\|/g, "\\|")}\` | ${c.count} | ${c.pct}% |`);
+      });
+      lines.push(``);
+      lines.push(
+        `> 🎯 **Action prioritaire** : ouvrir le 1er composant de cette liste — c'est le smoking gun direct, plus besoin de \`rg\` à l'aveugle.`,
+      );
+      lines.push(``);
+    }
+    if (hydrationDetails.topDigests.length > 0) {
+      lines.push(`**Top digests (groupes d'erreurs identiques) :**`);
+      lines.push(``);
+      lines.push(`| Digest | Occurrences |`);
+      lines.push(`|---|---:|`);
+      hydrationDetails.topDigests.slice(0, 5).forEach((d) =>
+        lines.push(`| \`${d.value}\` | ${d.count} |`),
+      );
+      lines.push(``);
+    }
+    if (hydrationDetails.topMessages.length > 0) {
+      lines.push(`**Messages d'erreur observés :**`);
+      lines.push(``);
+      hydrationDetails.topMessages.forEach((m) => {
+        const trimmed = m.value.length > 200 ? m.value.slice(0, 200) + "…" : m.value;
+        lines.push(`- (${m.count}×) ${trimmed}`);
+      });
+      lines.push(``);
+    }
+  }
+
+  if (csrDuration && csrDuration.count > 0) {
+    lines.push(`## Durée mesurée du CSR fallback`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`csr-fallback-duration\` (mesure réelle via \`performance.now()\` après double rAF).`,
+    );
+    lines.push(``);
+    lines.push(`| Échantillons | Médiane | p95 | Max | > 500ms | > 1500ms |`);
+    lines.push(`|---:|---:|---:|---:|---:|---:|`);
+    lines.push(
+      `| ${csrDuration.count} | ${csrDuration.medianMs}ms | ${csrDuration.p95Ms}ms | ${csrDuration.maxMs}ms | ${csrDuration.over500ms} | ${csrDuration.over1500ms} |`,
+    );
+    lines.push(``);
+    if (csrDuration.medianMs > 1500) {
+      lines.push(
+        `> 🚨 **Médiane > 1500ms** : flash blanc visible plus d'1.5s — bounce quasi certain. Réduire le bundle critique de la home.`,
+      );
+    } else if (csrDuration.medianMs > 500) {
+      lines.push(
+        `> ⚠️ **Médiane > 500ms** : flash perçu par l'utilisateur. Acceptable à court terme, à corriger en parallèle du fix racine.`,
+      );
+    } else {
+      lines.push(
+        `> ✅ Médiane sous 500ms : le re-render est presque imperceptible. Priorité = supprimer la cause, pas la durée.`,
+      );
+    }
+    lines.push(``);
+  }
+
+  if (webViews && webViews.total > 0) {
+    lines.push(`## WebView in-app détectés (côté client)`);
+    lines.push(``);
+    lines.push(
+      `Détection client (parsing UA) émise via \`webview-detected\`. Source plus fiable que \`browser\` Umami pour les apps sociales.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total détections** : ${webViews.total}`);
+    lines.push(``);
+    if (webViews.byApp.length > 0) {
+      lines.push(`| App | Détections | % |`);
+      lines.push(`|---|---:|---:|`);
+      webViews.byApp.forEach((a) => lines.push(`| ${a.app} | ${a.count} | ${a.pct}% |`));
+      lines.push(``);
+      const top = webViews.byApp[0];
+      if (top.pct > 50) {
+        lines.push(
+          `> 🎯 **${top.pct}% via ${top.app}** — la majorité du trafic publicitaire passe par ce WebView. Tester explicitement dans cet environnement (pas Chrome desktop).`,
+        );
+        lines.push(``);
+      }
+    }
+  }
+
+  if (urlCleaned && urlCleaned.total > 0) {
+    lines.push(`## URLs nettoyées côté client (suivi du fix)`);
+    lines.push(``);
+    lines.push(
+      `Event \`url-cleaned\` émis quand \`history.replaceState\` strippe les params polluants. Permet de mesurer si le fix anti-fbclid tourne effectivement.`,
+    );
+    lines.push(``);
+    lines.push(`- **Total nettoyages** : ${urlCleaned.total}`);
+    lines.push(``);
+    if (urlCleaned.topRemoved.length > 0) {
+      lines.push(`**Params nettoyés :**`);
+      lines.push(``);
+      lines.push(`| Param | Occurrences | % |`);
+      lines.push(`|---|---:|---:|`);
+      urlCleaned.topRemoved.forEach((r) =>
+        lines.push(`| \`${r.param}\` | ${r.count} | ${r.pct}% |`),
+      );
+      lines.push(``);
+    }
+  }
+
+  if (pageviewPerf && (pageviewPerf.ttfbCount > 0 || pageviewPerf.fcpCount > 0)) {
+    lines.push(`## Core Web Vitals (TTFB / FCP)`);
+    lines.push(``);
+    lines.push(
+      `Données issues de l'event \`pageview-perf\` (PerformanceObserver côté client).`,
+    );
+    lines.push(``);
+    lines.push(`| Métrique | Échantillons | Médiane | p95 | Verdict |`);
+    lines.push(`|---|---:|---:|---:|---|`);
+    if (pageviewPerf.ttfbCount > 0) {
+      const v =
+        pageviewPerf.ttfbMedianMs < 800
+          ? "🟢 bon"
+          : pageviewPerf.ttfbMedianMs < 1800
+            ? "🟡 à améliorer"
+            : "🔴 mauvais";
+      lines.push(
+        `| TTFB | ${pageviewPerf.ttfbCount} | ${pageviewPerf.ttfbMedianMs}ms | ${pageviewPerf.ttfbP95Ms}ms | ${v} |`,
+      );
+    }
+    if (pageviewPerf.fcpCount > 0) {
+      const v =
+        pageviewPerf.fcpMedianMs < 1800
+          ? "🟢 bon"
+          : pageviewPerf.fcpMedianMs < 3000
+            ? "🟡 à améliorer"
+            : "🔴 mauvais";
+      lines.push(
+        `| FCP | ${pageviewPerf.fcpCount} | ${pageviewPerf.fcpMedianMs}ms | ${pageviewPerf.fcpP95Ms}ms | ${v} |`,
+      );
+    }
     lines.push(``);
   }
 
