@@ -80,6 +80,9 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   // Quand toutes les requêtes sont terminées, on coupe le chrono
   useEffect(() => {
+    if (liveError && dataMode === "static") {
+      queryClient.invalidateQueries({ refetchType: "active" });
+    }
     if (refreshStartedAt !== null && fetchingCount === 0 && dataMode === "live" && !liveError) {
       setLastLiveRefreshAt(new Date().toISOString());
       setRefreshStartedAt(null);
@@ -89,7 +92,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
       setRefreshStartedAt(null);
       setElapsedMs(0);
     }
-  }, [fetchingCount, refreshStartedAt, dataMode, liveError]);
+  }, [fetchingCount, refreshStartedAt, dataMode, liveError, queryClient]);
 
   async function recalcLive() {
     if (!liveAvailable) return;
