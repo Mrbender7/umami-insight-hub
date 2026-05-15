@@ -8,7 +8,32 @@ const WEBSITE_ID =
 const API_TOKEN_ENV = import.meta.env.VITE_UMAMI_API_TOKEN as string | undefined;
 const API_TOKEN = API_TOKEN_ENV ?? "";
 const HAS_API_TOKEN = API_TOKEN_ENV !== undefined && API_TOKEN_ENV !== "";
-const USE_STATIC_DATA = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
+const STATIC_DATA_DEFAULT = import.meta.env.VITE_USE_STATIC_UMAMI_DATA === "true";
+
+// Runtime data-mode flag. Defaults to env var. Can be flipped to "live" at runtime
+// via setDataMode("live") (e.g. when the user clicks "Recalculer en direct").
+export type DataMode = "static" | "live";
+let _dataMode: DataMode = STATIC_DATA_DEFAULT ? "static" : "live";
+const _modeListeners = new Set<(m: DataMode) => void>();
+
+export function getDataMode(): DataMode {
+  return _dataMode;
+}
+export function setDataMode(mode: DataMode): void {
+  if (_dataMode === mode) return;
+  _dataMode = mode;
+  _modeListeners.forEach((fn) => fn(mode));
+}
+export function subscribeDataMode(fn: (m: DataMode) => void): () => void {
+  _modeListeners.add(fn);
+  return () => _modeListeners.delete(fn);
+}
+export function isStaticMode(): boolean {
+  return _dataMode === "static";
+}
+export function canUseLiveMode(): boolean {
+  return HAS_API_TOKEN;
+}
 // CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
