@@ -1,6 +1,16 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Globe2 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+} from "recharts";
 import { getCountries, getSessions, getRange, type Period } from "@/lib/umami";
 
 // Codes ISO → noms français (top pays attendus)
