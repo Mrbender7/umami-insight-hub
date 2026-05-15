@@ -9,6 +9,7 @@ import { CountriesView } from "./CountriesView";
 import { UsersView } from "./UsersView";
 import { RealtimeView } from "./RealtimeView";
 import { AcquisitionView } from "./AcquisitionView";
+import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
@@ -157,11 +158,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {view === "realtime" && <RealtimeView />}
-        {view === "acquisition" && <AcquisitionView period={period} />}
-        {view === "diagnostic" && <DiagnosticView period={period} />}
-        {view === "countries" && <CountriesView period={period} />}
-        {view === "users" && <UsersView period={period} />}
+        <ViewErrorBoundary>
+          {view === "realtime" && <RealtimeView />}
+          {view === "acquisition" && <AcquisitionView period={period} />}
+          {view === "diagnostic" && <DiagnosticView period={period} />}
+          {view === "countries" && <CountriesView period={period} />}
+          {view === "users" && <UsersView period={period} />}
+        </ViewErrorBoundary>
         {view === "dashboard" && (
           <>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
