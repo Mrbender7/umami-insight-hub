@@ -152,7 +152,14 @@ async function loadStaticData(): Promise<StaticUmamiData> {
   return staticDataPromise;
 }
 
-export function getRange(period: Period): Range {
+export async function getStaticGeneratedAt(): Promise<string | null> {
+  try {
+    const data = await loadStaticData();
+    return data.generatedAt ?? null;
+  } catch {
+    return null;
+  }
+}
   const endAt = Date.now();
   const hour = 60 * 60 * 1000;
   const day = 24 * hour;
