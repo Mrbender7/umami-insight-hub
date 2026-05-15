@@ -159,6 +159,7 @@ export async function getStaticGeneratedAt(): Promise<string | null> {
   } catch {
     return null;
   }
+}
 
 export function getRange(period: Period): Range {
   const endAt = Date.now();
