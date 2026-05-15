@@ -14,6 +14,7 @@ import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
   ERROR_EVENTS, type Period,
   getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
+  getLastLiveError, subscribeLiveError,
 } from "@/lib/umami";
 import { logout } from "@/lib/auth";
 import { KpiCard } from "./KpiCard";
@@ -59,11 +60,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [lastLiveRefreshAt, setLastLiveRefreshAt] = useState<string | null>(null);
   const [refreshStartedAt, setRefreshStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [liveError, setLiveError] = useState<string | null>(getLastLiveError());
   const queryClient = useQueryClient();
   const fetchingCount = useIsFetching();
   const liveAvailable = canUseLiveMode();
 
   useEffect(() => subscribeDataMode(setDataModeState), []);
+  useEffect(() => subscribeLiveError(setLiveError), []);
   useEffect(() => {
     if (dataMode === "static") getStaticGeneratedAt().then(setStaticGeneratedAt);
   }, [dataMode]);
@@ -77,26 +80,43 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   // Quand toutes les requêtes sont terminées, on coupe le chrono
   useEffect(() => {
-    if (refreshStartedAt !== null && fetchingCount === 0) {
+    if (refreshStartedAt !== null && fetchingCount === 0 && dataMode === "live" && !liveError) {
       setLastLiveRefreshAt(new Date().toISOString());
       setRefreshStartedAt(null);
       setElapsedMs(0);
     }
-  }, [fetchingCount, refreshStartedAt]);
+    if (refreshStartedAt !== null && fetchingCount === 0 && liveError) {
+      setRefreshStartedAt(null);
+      setElapsedMs(0);
+    }
+  }, [fetchingCount, refreshStartedAt, dataMode, liveError]);
 
   async function recalcLive() {
     if (!liveAvailable) return;
     setDataMode("live");
+    setLiveError(null);
     setRefreshStartedAt(Date.now());
     setElapsedMs(0);
-    // Vide les caches static pour forcer le re-fetch sur tous les onglets actifs
-    await queryClient.invalidateQueries();
+    try {
+      // Refetch uniquement les requêtes affichées/actives : évite les vagues de requêtes invisibles.
+      await queryClient.invalidateQueries({ refetchType: "active" });
+      if (getDataMode() === "live" && !getLastLiveError()) {
+        setLastLiveRefreshAt(new Date().toISOString());
+      }
+    } catch {
+      setDataMode("static");
+      await queryClient.invalidateQueries({ refetchType: "active" });
+    } finally {
+      setRefreshStartedAt(null);
+      setElapsedMs(0);
+    }
   }
 
   function backToStatic() {
     setDataMode("static");
     queryClient.invalidateQueries();
     setLastLiveRefreshAt(null);
+    setLiveError(null);
     setRefreshStartedAt(null);
   }
 
