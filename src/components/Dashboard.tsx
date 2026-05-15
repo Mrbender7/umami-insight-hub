@@ -271,8 +271,23 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                   Interrogation de l'API Umami pour la période sélectionnée.
                 </p>
                 <p className="mt-3 text-xs tabular-nums text-primary">
-                  {fetchingCount} requête{fetchingCount > 1 ? "s" : ""} en cours
+                  {fetchingCount > 0
+                    ? `${fetchingCount} requête${fetchingCount > 1 ? "s" : ""} en cours`
+                    : "Finalisation…"}
+                  {" · "}
+                  {(elapsedMs / 1000).toFixed(1)}s
                 </p>
+                {elapsedMs > 10000 && (
+                  <p className="mt-2 text-[11px] text-amber-500">
+                    L'API met du temps à répondre (proxy CORS lent). Patiente encore quelques secondes.
+                  </p>
+                )}
+                <button
+                  onClick={() => { setRefreshStartedAt(null); setElapsedMs(0); }}
+                  className="mt-4 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                >
+                  Annuler l'attente
+                </button>
               </div>
             </div>
           </div>
