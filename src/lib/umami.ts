@@ -63,6 +63,17 @@ function buildProxiedUrl(targetUrl: string) {
   return `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
 }
 
+function abortMessage(error: unknown): string {
+  const err = error as Error;
+  return err?.name === "AbortError" ? "délai dépassé" : err?.message || "échec réseau";
+}
+
+function markLiveFailure(message: string): never {
+  setLastLiveError(message);
+  if (STATIC_DATA_DEFAULT) setDataMode("static");
+  throw new Error(message);
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
