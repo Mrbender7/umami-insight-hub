@@ -39,6 +39,9 @@ export const TRAFFIC_EVENTS = [
   "url-cleaned",
   "webview-detected",
   "pageview-perf",
+  "lite-view",
+  "lite-cta-full",
+  "lite-cta-android",
 ] as const;
 
 export const ERROR_EVENTS = [
