@@ -95,6 +95,8 @@ export function CountriesView({ period }: { period: Period }) {
         <h2 className="text-lg font-semibold tracking-tight">Pays — visites & engagement</h2>
       </div>
 
+      <CountriesBarChart rows={rows.slice(0, 10)} period={period} />
+
       <div className="rounded-2xl bg-gradient-card border-neon shadow-neon overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
