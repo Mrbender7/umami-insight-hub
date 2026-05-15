@@ -265,13 +265,13 @@ async function umamiFetch<T>(
   } catch (error) {
     fail(`direct + proxy ont échoué (${abortMessage(error)})`);
   }
-  if (!res) fail("aucune réponse du proxy");
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    fail(`proxy HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`);
+  const response = res ?? fail("aucune réponse du proxy");
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    fail(`proxy HTTP ${response.status} ${response.statusText}${text ? ` — ${text}` : ""}`);
   }
   setLastLiveError(null);
-  return res.json() as Promise<T>;
+  return response.json() as Promise<T>;
 }
 
 export interface EventCount {
