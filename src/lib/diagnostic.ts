@@ -940,6 +940,102 @@ export function analyzePageviewPerf(
   };
 }
 
+// ===================== Acquisition (ad-landing enrichi) =====================
+
+export interface AcquisitionStat {
+  total: number;
+  liteCount: number;
+  fullCount: number;
+  webviewCount: number;
+  webviewPct: number;
+  hasFbclidCount: number;
+  hasFbclidPct: number;
+  topSources: { value: string; count: number; pct: number }[];
+  topMediums: { value: string; count: number; pct: number }[];
+  topCampaigns: { value: string; count: number; pct: number }[];
+  topApps: { value: string; count: number; pct: number }[];
+  topReferrers: { value: string; count: number; pct: number }[];
+  topPaths: { value: string; count: number; pct: number }[];
+}
+
+function totalsForField(values: EventDataValue[]) {
+  return sumTotals(values);
+}
+
+function countMatching(values: EventDataValue[], match: (raw: string) => boolean): number {
+  return values.reduce((acc, v) => (match(v.fieldValue) ? acc + v.total : acc), 0);
+}
+
+export function analyzeAcquisition(args: {
+  variant: EventDataValue[];
+  source: EventDataValue[];
+  medium: EventDataValue[];
+  campaign: EventDataValue[];
+  hasFbclid: EventDataValue[];
+  referrer: EventDataValue[];
+  webview: EventDataValue[];
+  app: EventDataValue[];
+  path: EventDataValue[];
+  totalAdLanding: number;
+}): AcquisitionStat {
+  // Le total réel d'ad-landing vient des counts (plus fiable que de sommer un champ qui peut être vide).
+  // Mais on retombe sur la somme du champ source si le total fourni est 0.
+  const total = args.totalAdLanding > 0 ? args.totalAdLanding : Math.max(
+    totalsForField(args.source),
+    totalsForField(args.path),
+    totalsForField(args.variant),
+  );
+  const liteCount = countMatching(args.variant, (v) => v === "lite");
+  // full = total - lite (variant absent côté full app)
+  const fullCount = Math.max(0, total - liteCount);
+  const webviewCount = countMatching(args.webview, (v) => v === "true" || v === "1");
+  const hasFbclidCount = countMatching(args.hasFbclid, (v) => v === "true" || v === "1");
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  return {
+    total,
+    liteCount,
+    fullCount,
+    webviewCount,
+    webviewPct: pct(webviewCount),
+    hasFbclidCount,
+    hasFbclidPct: pct(hasFbclidCount),
+    topSources: topValues(args.source, totalsForField(args.source), 10),
+    topMediums: topValues(args.medium, totalsForField(args.medium), 8),
+    topCampaigns: topValues(args.campaign, totalsForField(args.campaign), 10),
+    topApps: topValues(args.app, totalsForField(args.app), 10),
+    topReferrers: topValues(args.referrer, totalsForField(args.referrer), 10),
+    topPaths: topValues(args.path, totalsForField(args.path), 8),
+  };
+}
+
+// ===================== Funnel page Lite =====================
+
+export interface LiteFunnelStat {
+  views: number;
+  ctaFull: number;
+  ctaAndroid: number;
+  fullConversionRate: number; // %
+  androidConversionRate: number; // %
+  totalConversionRate: number; // %
+}
+
+export function analyzeLiteFunnel(counts: EventCount[]): LiteFunnelStat {
+  const get = (name: string) =>
+    counts.filter((c) => c.x === name).reduce((acc, c) => acc + c.y, 0);
+  const views = get("lite-view");
+  const ctaFull = get("lite-cta-full");
+  const ctaAndroid = get("lite-cta-android");
+  const pct = (n: number) => (views > 0 ? Math.round((n / views) * 1000) / 10 : 0);
+  return {
+    views,
+    ctaFull,
+    ctaAndroid,
+    fullConversionRate: pct(ctaFull),
+    androidConversionRate: pct(ctaAndroid),
+    totalConversionRate: pct(ctaFull + ctaAndroid),
+  };
+}
+
 export function countUniqueErrorSessions(errorEvents: UmamiEvent[]): number {
   const set = new Set<string>();
   for (const e of errorEvents) if (e.sessionId) set.add(e.sessionId);
