@@ -34,15 +34,30 @@ export function isStaticMode(): boolean {
 export function canUseLiveMode(): boolean {
   return HAS_API_TOKEN;
 }
-// CORS proxy for static hosting (GitHub Pages). Override with VITE_CORS_PROXY="" to disable.
+// CORS proxy fallback (used uniquement si l'appel direct échoue à cause de CORS).
+// Désactivable via VITE_CORS_PROXY="".
 const CORS_PROXY =
   import.meta.env.VITE_CORS_PROXY !== undefined
     ? (import.meta.env.VITE_CORS_PROXY as string)
     : "https://api.allorigins.win/raw?url=";
 
+// On retient si le direct fonctionne pour éviter de retenter à chaque appel.
+// null = pas encore testé, true = direct OK, false = il faut passer par le proxy.
+let _directWorks: boolean | null = null;
+
 function buildProxiedUrl(targetUrl: string) {
   if (!CORS_PROXY) return targetUrl;
   return `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function getEnvStatus() {
