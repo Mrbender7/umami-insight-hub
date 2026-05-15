@@ -203,24 +203,47 @@ async function umamiFetch<T>(
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   });
-  const finalUrl = buildProxiedUrl(url.toString());
+  const directUrl = url.toString();
+  const headers = {
+    "x-umami-api-key": API_TOKEN,
+    Authorization: `Bearer ${API_TOKEN}`,
+    Accept: "application/json",
+  };
+
+  // 1) Tentative directe (rapide). Si on sait déjà que ça échoue, on saute.
+  if (_directWorks !== false) {
+    try {
+      const res = await fetchWithTimeout(directUrl, { headers }, 15000);
+      if (res.ok) {
+        _directWorks = true;
+        return (await res.json()) as T;
+      }
+      // 4xx/5xx authentique de l'API : on remonte l'erreur sans tenter le proxy.
+      if (_directWorks === true || (res.status >= 400 && res.status < 600 && res.status !== 0)) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}.`);
+      }
+    } catch (err) {
+      // Erreur réseau / CORS / timeout → on bascule sur le proxy.
+      if (_directWorks === true) throw err;
+      _directWorks = false;
+    }
+  }
+
+  // 2) Fallback proxy CORS.
+  const proxiedUrl = buildProxiedUrl(directUrl);
   let res: Response;
   try {
-    res = await fetch(finalUrl, {
-      headers: {
-        "x-umami-api-key": API_TOKEN,
-        Accept: "application/json",
-      },
-    });
+    res = await fetchWithTimeout(proxiedUrl, { headers }, 30000);
   } catch (error) {
     throw new Error(
-      `Fetch error: ${(error as Error).message}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
+      `Fetch error: ${(error as Error).message}. Direct + proxy ont échoué. URL cible : ${directUrl}`,
     );
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(
-      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL appelée : ${finalUrl}. URL Umami cible : ${url.toString()}`,
+      `HTTP ${res.status} ${res.statusText}. Détail : ${text || "réponse vide"}. URL via proxy : ${proxiedUrl}`,
     );
   }
   return res.json() as Promise<T>;
