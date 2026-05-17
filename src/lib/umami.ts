@@ -650,15 +650,10 @@ function normalizeStats(raw: unknown): WebsiteStats {
 export async function getStats(range: Range): Promise<WebsiteStats> {
   if (isStaticMode()) {
     const data = await loadStaticData();
-    return (
-      data.periods[getPeriodFromRange(range)].stats ?? {
-        pageviews: { value: 0 },
-        visitors: { value: 0 },
-        visits: { value: 0 },
-        bounces: { value: 0 },
-        totaltime: { value: 0 },
-      }
-    );
+    const periodEntry = data.periods[getPeriodFromRange(range)];
+    // Normalisation défensive : selon la version d'Umami / l'état du JSON pré-buildé,
+    // `stats` peut être absent, null, ou des nombres bruts au lieu de { value, prev }.
+    return normalizeStats(periodEntry?.stats ?? null);
   }
   const raw = await umamiFetch<unknown>(`/websites/${WEBSITE_ID}/stats`, {
     startAt: range.startAt,
@@ -676,7 +671,7 @@ export interface ReferrerStat {
 export async function getReferrers(range: Range): Promise<ReferrerStat[]> {
   if (isStaticMode()) {
     const data = await loadStaticData();
-    return data.periods[getPeriodFromRange(range)].referrers ?? [];
+    return data.periods[getPeriodFromRange(range)]?.referrers ?? [];
   }
   return umamiFetch<ReferrerStat[]>(`/websites/${WEBSITE_ID}/metrics`, {
     startAt: range.startAt,
@@ -702,7 +697,7 @@ export async function getPageviewsSeries(
 ): Promise<PageviewSeries> {
   if (isStaticMode()) {
     const data = await loadStaticData();
-    const ps = data.periods[getPeriodFromRange(range)].pageviewsSeries;
+    const ps = data.periods[getPeriodFromRange(range)]?.pageviewsSeries;
     if (!opts.referrer) return ps?.total ?? { pageviews: [], sessions: [] };
     if (/google/i.test(opts.referrer)) return ps?.google ?? { pageviews: [], sessions: [] };
     if (/facebook/i.test(opts.referrer)) return ps?.facebook ?? { pageviews: [], sessions: [] };
