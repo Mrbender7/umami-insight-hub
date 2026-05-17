@@ -43,6 +43,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     queryKey: ["umami-events", period],
     queryFn: () => getRecentEvents(range),
   });
+  const pvTotal = useQuery({
+    queryKey: ["umami-pageviews", period, "total"],
+    queryFn: () => getPageviewsSeries(range),
+  });
+  const pvGoogle = useQuery({
+    queryKey: ["umami-pageviews", period, "google"],
+    queryFn: () => getPageviewsSeries(range, { referrer: "google.com" }),
+  });
+  const pvFacebook = useQuery({
+    queryKey: ["umami-pageviews", period, "facebook"],
+    queryFn: () => getPageviewsSeries(range, { referrer: "facebook.com" }),
+  });
 
   const countMap = useMemo(() => {
     const m = new Map<string, number>();
