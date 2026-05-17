@@ -671,7 +671,7 @@ export interface ReferrerStat {
 export async function getReferrers(range: Range): Promise<ReferrerStat[]> {
   if (isStaticMode()) {
     const data = await loadStaticData();
-    return data.periods[getPeriodFromRange(range)].referrers ?? [];
+    return data.periods[getPeriodFromRange(range)]?.referrers ?? [];
   }
   return umamiFetch<ReferrerStat[]>(`/websites/${WEBSITE_ID}/metrics`, {
     startAt: range.startAt,
