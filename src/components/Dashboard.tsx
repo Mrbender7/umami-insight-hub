@@ -345,6 +345,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </ViewErrorBoundary>
         {view === "dashboard" && (
           <>
+        <SourcesRow period={period} />
+
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Ad landing" value={adLanding.toLocaleString()} icon={MousePointerClick} accent="blue" hint="Visiteurs depuis les pubs" />
           <KpiCard label="Taux de rebond" value={`${bounceRate}%`} icon={Activity} accent="violet" hint={`${earlyBounce} bounces / ${adLanding} arrivées`} />
@@ -353,7 +355,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </section>
 
         <section>
-          <TrafficChart series={series.data ?? []} period={period} />
+          <TrafficChart
+            series={series.data ?? []}
+            period={period}
+            pageviewsTotal={pvTotal.data}
+            pageviewsGoogle={pvGoogle.data}
+            pageviewsFacebook={pvFacebook.data}
+          />
         </section>
 
         <section>
