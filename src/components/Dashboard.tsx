@@ -368,6 +368,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </section>
           </>
         )}
+        </ViewErrorBoundary>
 
         <footer className="pt-4 pb-8 text-center text-xs text-muted-foreground">
           Données Umami Cloud · Période : {period}
