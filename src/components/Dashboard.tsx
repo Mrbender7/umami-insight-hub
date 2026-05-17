@@ -12,6 +12,7 @@ import { AcquisitionView } from "./AcquisitionView";
 import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
+  getPageviewsSeries,
   ERROR_EVENTS, type Period,
   getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
   getLastLiveError, subscribeLiveError,
@@ -21,6 +22,7 @@ import { KpiCard } from "./KpiCard";
 import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
+import { SourcesRow } from "./SourcesRow";
 
 type View = "dashboard" | "realtime" | "acquisition" | "diagnostic" | "countries" | "users";
 
