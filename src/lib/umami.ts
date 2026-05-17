@@ -156,6 +156,13 @@ interface StaticPeriodData {
   sessions?: PagedSessions;
   eventDataValues?: Record<string, Record<string, EventDataValue[]>>;
   eventDataFields?: EventDataField[];
+  stats?: WebsiteStats;
+  referrers?: ReferrerStat[];
+  pageviewsSeries?: {
+    total?: PageviewSeries;
+    google?: PageviewSeries;
+    facebook?: PageviewSeries;
+  };
 }
 
 interface StaticUmamiData {
@@ -608,6 +615,156 @@ export async function getRealtime(startAt?: number): Promise<RealtimeData> {
     referrers: referrers.status === "fulfilled" ? referrers.value ?? [] : [],
     timestamp: endAt,
   };
+}
+
+// ===== Stats globales (visits, pageviews, etc.) =====
+export interface StatValue {
+  value: number;
+  prev?: number;
+}
+export interface WebsiteStats {
+  pageviews: StatValue;
+  visitors: StatValue;
+  visits: StatValue;
+  bounces: StatValue;
+  totaltime: StatValue;
+}
+
+function normalizeStat(raw: unknown): StatValue {
+  if (typeof raw === "number") return { value: raw };
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return { value: Number(o.value ?? 0), prev: o.prev != null ? Number(o.prev) : undefined };
+}
+
+function normalizeStats(raw: unknown): WebsiteStats {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    pageviews: normalizeStat(o.pageviews),
+    visitors: normalizeStat(o.visitors),
+    visits: normalizeStat(o.visits),
+    bounces: normalizeStat(o.bounces),
+    totaltime: normalizeStat(o.totaltime),
+  };
+}
+
+export async function getStats(range: Range): Promise<WebsiteStats> {
+  if (isStaticMode()) {
+    const data = await loadStaticData();
+    return (
+      data.periods[getPeriodFromRange(range)].stats ?? {
+        pageviews: { value: 0 },
+        visitors: { value: 0 },
+        visits: { value: 0 },
+        bounces: { value: 0 },
+        totaltime: { value: 0 },
+      }
+    );
+  }
+  const raw = await umamiFetch<unknown>(`/websites/${WEBSITE_ID}/stats`, {
+    startAt: range.startAt,
+    endAt: range.endAt,
+  });
+  return normalizeStats(raw);
+}
+
+// ===== Référents =====
+export interface ReferrerStat {
+  x: string; // hostname
+  y: number;
+}
+
+export async function getReferrers(range: Range): Promise<ReferrerStat[]> {
+  if (isStaticMode()) {
+    const data = await loadStaticData();
+    return data.periods[getPeriodFromRange(range)].referrers ?? [];
+  }
+  return umamiFetch<ReferrerStat[]>(`/websites/${WEBSITE_ID}/metrics`, {
+    startAt: range.startAt,
+    endAt: range.endAt,
+    type: "referrer",
+    limit: 200,
+  });
+}
+
+// ===== Séries pageviews (avec filtre referrer optionnel) =====
+export interface PageviewSeriesPoint {
+  x: string; // timestamp bucket
+  y: number;
+}
+export interface PageviewSeries {
+  pageviews: PageviewSeriesPoint[];
+  sessions: PageviewSeriesPoint[];
+}
+
+export async function getPageviewsSeries(
+  range: Range,
+  opts: { referrer?: string } = {},
+): Promise<PageviewSeries> {
+  if (isStaticMode()) {
+    const data = await loadStaticData();
+    const ps = data.periods[getPeriodFromRange(range)].pageviewsSeries;
+    if (!opts.referrer) return ps?.total ?? { pageviews: [], sessions: [] };
+    if (/google/i.test(opts.referrer)) return ps?.google ?? { pageviews: [], sessions: [] };
+    if (/facebook/i.test(opts.referrer)) return ps?.facebook ?? { pageviews: [], sessions: [] };
+    return { pageviews: [], sessions: [] };
+  }
+  return umamiFetch<PageviewSeries>(`/websites/${WEBSITE_ID}/pageviews`, {
+    startAt: range.startAt,
+    endAt: range.endAt,
+    unit: range.unit,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    referrer: opts.referrer,
+  });
+}
+
+// ===== Bucketisation des sources =====
+export type SourceCategory = "google" | "facebook" | "other";
+
+export function categorizeReferrer(host: string): SourceCategory {
+  const h = (host || "").toLowerCase();
+  if (!h) return "other";
+  if (/google|mokka|gstatic|googleadservices|doubleclick/.test(h)) return "google";
+  if (/facebook|fb\.me|fbcdn|fbsbx|messenger/.test(h)) return "facebook";
+  return "other";
+}
+
+export type FacebookDevice = "mobile" | "desktop" | "unknown";
+
+export function classifyFacebookDevice(host: string): FacebookDevice {
+  const h = (host || "").toLowerCase();
+  if (/^m\.facebook\.com|fb\.me|mbasic\.facebook|messenger/.test(h)) return "mobile";
+  if (/^www\.facebook\.com|business\.facebook|web\.facebook/.test(h)) return "desktop";
+  return "unknown";
+}
+
+export interface ReferrerBreakdown {
+  total: number;
+  google: number;
+  facebook: number;
+  facebookMobile: number;
+  facebookDesktop: number;
+  facebookUnknown: number;
+  other: number;
+}
+
+export function aggregateReferrers(refs: ReferrerStat[]): ReferrerBreakdown {
+  const b: ReferrerBreakdown = {
+    total: 0, google: 0, facebook: 0,
+    facebookMobile: 0, facebookDesktop: 0, facebookUnknown: 0, other: 0,
+  };
+  for (const r of refs) {
+    b.total += r.y;
+    const cat = categorizeReferrer(r.x);
+    if (cat === "google") b.google += r.y;
+    else if (cat === "facebook") {
+      b.facebook += r.y;
+      const dev = classifyFacebookDevice(r.x);
+      if (dev === "mobile") b.facebookMobile += r.y;
+      else if (dev === "desktop") b.facebookDesktop += r.y;
+      else b.facebookUnknown += r.y;
+    } else b.other += r.y;
+  }
+  return b;
 }
 
 export async function getSessionActivity(

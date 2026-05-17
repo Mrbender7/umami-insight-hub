@@ -12,6 +12,7 @@ import { AcquisitionView } from "./AcquisitionView";
 import { ViewErrorBoundary } from "./ViewErrorBoundary";
 import {
   getEventCounts, getEventSeries, getRecentEvents, getRange,
+  getPageviewsSeries,
   ERROR_EVENTS, type Period,
   getDataMode, setDataMode, subscribeDataMode, canUseLiveMode, getStaticGeneratedAt,
   getLastLiveError, subscribeLiveError,
@@ -21,6 +22,7 @@ import { KpiCard } from "./KpiCard";
 import { PeriodSelector } from "./PeriodSelector";
 import { TrafficChart } from "./TrafficChart";
 import { ErrorsTable } from "./ErrorsTable";
+import { SourcesRow } from "./SourcesRow";
 
 type View = "dashboard" | "realtime" | "acquisition" | "diagnostic" | "countries" | "users";
 
@@ -40,6 +42,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
   const events = useQuery({
     queryKey: ["umami-events", period],
     queryFn: () => getRecentEvents(range),
+  });
+  const pvTotal = useQuery({
+    queryKey: ["umami-pageviews", period, "total"],
+    queryFn: () => getPageviewsSeries(range),
+  });
+  const pvGoogle = useQuery({
+    queryKey: ["umami-pageviews", period, "google"],
+    queryFn: () => getPageviewsSeries(range, { referrer: "google.com" }),
+  });
+  const pvFacebook = useQuery({
+    queryKey: ["umami-pageviews", period, "facebook"],
+    queryFn: () => getPageviewsSeries(range, { referrer: "facebook.com" }),
   });
 
   const countMap = useMemo(() => {
@@ -331,6 +345,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </ViewErrorBoundary>
         {view === "dashboard" && (
           <>
+        <SourcesRow period={period} />
+
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Ad landing" value={adLanding.toLocaleString()} icon={MousePointerClick} accent="blue" hint="Visiteurs depuis les pubs" />
           <KpiCard label="Taux de rebond" value={`${bounceRate}%`} icon={Activity} accent="violet" hint={`${earlyBounce} bounces / ${adLanding} arrivées`} />
@@ -339,7 +355,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </section>
 
         <section>
-          <TrafficChart series={series.data ?? []} period={period} />
+          <TrafficChart
+            series={series.data ?? []}
+            period={period}
+            pageviewsTotal={pvTotal.data}
+            pageviewsGoogle={pvGoogle.data}
+            pageviewsFacebook={pvFacebook.data}
+          />
         </section>
 
         <section>
