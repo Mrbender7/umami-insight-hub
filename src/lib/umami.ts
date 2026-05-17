@@ -697,7 +697,7 @@ export async function getPageviewsSeries(
 ): Promise<PageviewSeries> {
   if (isStaticMode()) {
     const data = await loadStaticData();
-    const ps = data.periods[getPeriodFromRange(range)].pageviewsSeries;
+    const ps = data.periods[getPeriodFromRange(range)]?.pageviewsSeries;
     if (!opts.referrer) return ps?.total ?? { pageviews: [], sessions: [] };
     if (/google/i.test(opts.referrer)) return ps?.google ?? { pageviews: [], sessions: [] };
     if (/facebook/i.test(opts.referrer)) return ps?.facebook ?? { pageviews: [], sessions: [] };
