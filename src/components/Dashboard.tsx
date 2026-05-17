@@ -342,8 +342,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           {view === "diagnostic" && <DiagnosticView period={period} />}
           {view === "countries" && <CountriesView period={period} />}
           {view === "users" && <UsersView period={period} />}
-        </ViewErrorBoundary>
-        {view === "dashboard" && (
+          {view === "dashboard" && (
           <>
         <SourcesRow period={period} />
 
