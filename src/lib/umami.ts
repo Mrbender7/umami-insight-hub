@@ -156,6 +156,13 @@ interface StaticPeriodData {
   sessions?: PagedSessions;
   eventDataValues?: Record<string, Record<string, EventDataValue[]>>;
   eventDataFields?: EventDataField[];
+  stats?: WebsiteStats;
+  referrers?: ReferrerStat[];
+  pageviewsSeries?: {
+    total?: PageviewSeries;
+    google?: PageviewSeries;
+    facebook?: PageviewSeries;
+  };
 }
 
 interface StaticUmamiData {
