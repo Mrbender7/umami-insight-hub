@@ -342,8 +342,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
           {view === "diagnostic" && <DiagnosticView period={period} />}
           {view === "countries" && <CountriesView period={period} />}
           {view === "users" && <UsersView period={period} />}
-        </ViewErrorBoundary>
-        {view === "dashboard" && (
+          {view === "dashboard" && (
           <>
         <SourcesRow period={period} />
 
@@ -369,6 +368,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         </section>
           </>
         )}
+        </ViewErrorBoundary>
 
         <footer className="pt-4 pb-8 text-center text-xs text-muted-foreground">
           Données Umami Cloud · Période : {period}
