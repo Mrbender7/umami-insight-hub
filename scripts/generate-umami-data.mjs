@@ -102,6 +102,44 @@ for (const [period, range] of Object.entries(periods)) {
     }),
   };
 
+  // Stats globales + référents + séries pageviews par source
+  try {
+    data.periods[period].stats = await umamiFetch(`/websites/${WEBSITE_ID}/stats`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+    });
+  } catch (err) {
+    console.warn(`stats KO pour ${period}:`, err.message);
+    data.periods[period].stats = null;
+  }
+  try {
+    data.periods[period].referrers = await umamiFetch(`/websites/${WEBSITE_ID}/metrics`, {
+      startAt: range.startAt,
+      endAt: range.endAt,
+      type: "referrer",
+      limit: 200,
+    });
+  } catch (err) {
+    console.warn(`referrers KO pour ${period}:`, err.message);
+    data.periods[period].referrers = [];
+  }
+  const pageviewsSeries = {};
+  for (const [key, referrer] of [["total", undefined], ["google", "google.com"], ["facebook", "facebook.com"]]) {
+    try {
+      pageviewsSeries[key] = await umamiFetch(`/websites/${WEBSITE_ID}/pageviews`, {
+        startAt: range.startAt,
+        endAt: range.endAt,
+        unit: range.unit,
+        timezone: "Europe/Brussels",
+        referrer,
+      });
+    } catch (err) {
+      console.warn(`pageviews(${key}) KO pour ${period}:`, err.message);
+      pageviewsSeries[key] = { pageviews: [], sessions: [] };
+    }
+  }
+  data.periods[period].pageviewsSeries = pageviewsSeries;
+
   // Event-data : champs disponibles + valeurs pour les events ciblés.
   try {
     data.periods[period].eventDataFields = await umamiFetch(
